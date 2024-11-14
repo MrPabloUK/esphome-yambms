@@ -21,7 +21,7 @@ substitutions:
   # +--------------------------------------+
   # | Use the settings below with caution  |
   # +--------------------------------------+
-  # Auto charge current control will automatically reduce the charging current as a cell reaches the BMS "cell_voltage_overvoltage_recovery".
+  # Auto charge current control will automatically reduce the charging current as a cell reaches the midpoint of BMS "cell_voltage_overvoltage_recovery" and "cell_voltage_overvoltage".
   # If unsure, leave the below settings as default, this will ensure charge current will taper correctly.
   # Factor to control the end of the charge current curve. A setting below 2 will extend the curve, above 2 will shorten the curve. 
   charge_a_factor_curve_end: "2.0"
@@ -54,9 +54,10 @@ sensor:
     - lambda: !lambda |-
               // Variables
               double cell_float_v = (id(${yambms_id}_float_voltage).state / id(${yambms_id}_cell_count).state);
+              double max_allow_v = ((id(${yambms_id}_cell_ovpr).state + id(${yambms_id}_cell_ovp).state)/2);
               // Auto Charge Current function
-              if (id(${yambms_id}_max_cell_voltage).state > id(${yambms_id}_cell_ovpr).state) return 0.0;
-              else return max(0.0,(- pow(${charge_a_factor_curve_end}, pow( max(0.0, ((x - cell_float_v) / (id(${yambms_id}_cell_ovpr).state - cell_float_v))),${charge_a_factor_curve_shape}))+2) * id(${yambms_id}_max_charge_current).state);
+              if (id(${yambms_id}_max_cell_voltage).state > max_allow_v return 0.0;
+              else return max(0.0,(- pow(${charge_a_factor_curve_end}, pow( max(0.0, ((x - cell_float_v) / (max_allow_v - cell_float_v))),${charge_a_factor_curve_shape}))+2) * id(${yambms_id}_max_charge_current).state);
   # Second, an exponential moving average is calculated. This will be used to smooth the transition between different initial charge current values.
   - platform: copy
     source_id: auto_ccl_initial
