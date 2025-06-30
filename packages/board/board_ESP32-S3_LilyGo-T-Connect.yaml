@@ -32,6 +32,9 @@ substitutions:
   # uart_esp_3
   tx_pin_3: '17'
   rx_pin_3: '18'
+  # uart_esp_4
+  tx_pin_3: '43'
+  rx_pin_3: '44'
   # canbus_esp32_can
   tx_pin_4: '9'
   rx_pin_4: '10'
