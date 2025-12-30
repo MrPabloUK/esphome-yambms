@@ -53,7 +53,7 @@ substitutions:
 
 switch:
   - platform: template
-    name: "${name} ${yambms_name} Temperature-based current limitation"
+    name: "${name} ${yambms_name} Temperature-based Current Limitation"
     id: ${yambms_id}_switch_temperature_based_current_limitation
     restore_mode: RESTORE_DEFAULT_ON
     optimistic: true
