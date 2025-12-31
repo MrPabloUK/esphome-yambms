@@ -483,6 +483,9 @@ sensor:
       else {
         return 0;
       }
+    on_value:
+      then:
+        - component.update: ${yambms_id}_ccl_derating_reason
 
 
   # +--------------------------------------+
@@ -519,6 +522,9 @@ sensor:
       else {
         return 0;
       }
+    on_value:
+      then:
+        - component.update: ${yambms_id}_dcl_derating_reason
 
   # +--------------------------------------+
   # | Battery State of Charge (SOC)        |
@@ -830,7 +836,7 @@ text_sensor:
     name: ${name} ${yambms_name} CCL Derating Reason
     id: ${yambms_id}_ccl_derating_reason
     icon: "mdi:information-outline"
-    update_interval: ${yambms_update_interval}
+    update_interval: never
     entity_category: diagnostic
     lambda: |-
       if (!id(${yambms_id}_requested_charge_current).has_state() || id(${yambms_id}_requested_charge_current).state == 0) {
@@ -846,7 +852,7 @@ text_sensor:
       if (min_val == 0.0f) return {"No Derating"};
       if (min_val == t_limit) return {"Temperature Derating"};
       if (min_val == e_limit) return {"EOC Derating"};
-      if (min_val == c_limit) return {"Max Cell Voltage Derating"};
+      if (min_val == c_limit) return {"AutoCCL Derating"};
       
       return {"Unknown"};
 
@@ -857,7 +863,7 @@ text_sensor:
     name: ${name} ${yambms_name} DCL Derating Reason
     id: ${yambms_id}_dcl_derating_reason
     icon: "mdi:information-outline"
-    update_interval: ${yambms_update_interval}
+    update_interval: never
     entity_category: diagnostic
     lambda: |-
       if (!id(${yambms_id}_requested_discharge_current).has_state() || id(${yambms_id}_requested_discharge_current).state == 0) {
@@ -871,7 +877,7 @@ text_sensor:
 
       if (min_val == 0.0f) return {"No Derating"};
       if (min_val == t_limit) return {"Temperature Derating"};
-      if (min_val == d_limit) return {"Min Cell Voltage Derating"};
+      if (min_val == d_limit) return {"AutoDCL Derating"};
       
       return {"Unknown"};
 
