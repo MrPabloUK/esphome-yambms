@@ -64,11 +64,15 @@ sensor:
       - lambda: |-
           float result = 0.0;
           if (id(${yambms_id}_switch_temperature_based_current_limitation).state) {
-            float batt_cap = ${yambms_id}_battery_capacity.state;
-            result = (x * batt_cap) - max_val;
+            float batt_capacity = id(${yambms_id}_battery_capacity).state; 
+            float max_current = id(${yambms_id}_max_charge_current).state;
+
+            result = x * batt_capacity
+            result = result - max_current
+            result = std::min(0.0, result)
             result = roundf(result * 10.0f) / 10.0f;
           }
-          // Update the global variable
+
           id(${yambms_id}_auto_temperature_ccl) = result;
           return result;
 
@@ -103,10 +107,14 @@ sensor:
       - lambda: |-
           float result = 0.0;
           if (id(${yambms_id}_switch_temperature_based_current_limitation).state) {
-            float batt_cap = ${yambms_id}_battery_capacity.state;
-            result = (x * batt_cap) - max_val;
+            float batt_capacity = id(${yambms_id}_battery_capacity).state; 
+            float max_current = id(${yambms_id}_max_discharge_current).state;
+
+            result = x * batt_capacity
+            result = result - max_current
+            result = std::min(0.0, result)
             result = roundf(result * 10.0f) / 10.0f;
           }
-          // Update the global variable
+
           id(${yambms_id}_auto_temperature_dcl) = result;
           return result;
