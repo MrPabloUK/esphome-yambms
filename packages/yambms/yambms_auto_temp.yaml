@@ -116,6 +116,7 @@ sensor:
 
   - platform: copy
     source_id: ${yambms_id}_max_temperature_sensor
+    name: auto_ccl_temp_limit_test
     id: auto_ccl_temp_limit_test
     unit_of_measurement: A
     device_class: current
