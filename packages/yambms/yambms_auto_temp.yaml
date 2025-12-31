@@ -67,9 +67,9 @@ sensor:
             float batt_capacity = id(${yambms_id}_battery_capacity).state; 
             float max_current = id(${yambms_id}_max_charge_current).state;
 
-            result = x * batt_capacity
-            result = result - max_current
-            result = std::min(0.0, result)
+            result = x * batt_capacity;
+            result = result - max_current;
+            result = std::min(0.0, result);
             result = roundf(result * 10.0f) / 10.0f;
           }
 
@@ -110,9 +110,9 @@ sensor:
             float batt_capacity = id(${yambms_id}_battery_capacity).state; 
             float max_current = id(${yambms_id}_max_discharge_current).state;
 
-            result = x * batt_capacity
-            result = result - max_current
-            result = std::min(0.0, result)
+            result = x * batt_capacity;
+            result = result - max_current;
+            result = std::min(0.0, result);
             result = roundf(result * 10.0f) / 10.0f;
           }
 
