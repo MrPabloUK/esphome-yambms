@@ -69,7 +69,7 @@ sensor:
 
             result = x * batt_capacity;
             result = result - max_current;
-            result = std::min(0.0, result);
+            result = min(0.0f, result);
             result = roundf(result * 10.0f) / 10.0f;
           }
 
@@ -112,7 +112,7 @@ sensor:
 
             result = x * batt_capacity;
             result = result - max_current;
-            result = std::min(0.0, result);
+            result = min(0.0f, result);
             result = roundf(result * 10.0f) / 10.0f;
           }
 
