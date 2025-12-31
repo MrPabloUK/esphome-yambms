@@ -110,3 +110,31 @@ sensor:
           // Update the global variable
           id(${yambms_id}_auto_temperature_dcl) = result;
           return result;
+
+
+
+
+  - platform: copy
+    source_id: ${yambms_id}_max_temperature_sensor
+    id: auto_ccl_temp_limit_test
+    unit_of_measurement: A
+    device_class: current
+    internal: false
+    filters:
+      - calibrate_linear:
+         method: exact
+         datapoints:
+         # Temperature -> Charge Rate
+           - 0.0 -> 0.05
+           - 5.0 -> 0.12
+           - 10.0 -> 0.3
+           - 15.0 -> 0.5
+           - 20.0 -> 0.5
+           - 25.0 -> 0.5
+           - 45.0 -> 0.5
+           - 50.0 -> 0.5
+           - 55.0 -> 0.5
+           - 60.0 -> 0.0
+      - clamp:
+          min_value: 0.0
+          max_value: 0.5
