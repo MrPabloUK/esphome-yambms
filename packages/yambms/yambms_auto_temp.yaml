@@ -17,39 +17,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
 
-substitutions:
   # +-------------------------------------------------------------------------+
   # | Temperature-based current limitation                                    |
   # | Can be disabled via the switch "Temperature-based current limitation"   |
   # | This factor is applied to the battery capacity (Ah), not the current    |
   # | maximum charge/discharge current. For example : 280Ah x 0.5 = 140A      |
   # +-------------------------------------------------------------------------
-
-  # Temperature -> Charge Rate
-  yambms_charging_rate_table: |
-    0.0 -> 0.05
-    5.0 -> 0.12
-    10.0 -> 0.3
-    15.0 -> 0.5
-    20.0 -> 0.5
-    25.0 -> 0.5
-    45.0 -> 0.5
-    50.0 -> 0.5
-    55.0 -> 0.5
-    60.0 -> 0.0
-
-  yambms_discharging_rate_table: |
-    -30.0 -> 0.0
-    -20.0 -> 0.5
-    -10.0 -> 0.5
-    -5.0 -> 0.5
-    0.0 -> 0.5
-    5.0 -> 0.5
-    45.0 -> 0.5
-    50.0 -> 0.5
-    55.0 -> 0.5
-    60.0 -> 0.0
-
 
 switch:
   - platform: template
@@ -73,7 +46,17 @@ sensor:
     filters:
       - calibrate_linear:
          method: exact
-         datapoints: ${yambms_charging_rate_table}
+         datapoints:
+           - 0.0 -> 0.05
+           - 5.0 -> 0.12
+           - 10.0 -> 0.3
+           - 15.0 -> 0.5
+           - 20.0 -> 0.5
+           - 25.0 -> 0.5
+           - 45.0 -> 0.5
+           - 50.0 -> 0.5
+           - 55.0 -> 0.5
+           - 60.0 -> 0.0
       - clamp:
           min_value: 0.0
           max_value: 0.5
@@ -101,7 +84,17 @@ sensor:
     filters:
       - calibrate_linear:
          method: exact
-         datapoints: ${yambms_discharging_rate_table}
+         datapoints:
+           - -30.0 -> 0.0
+           - -20.0 -> 0.5
+           - -10.0 -> 0.5
+           - -5.0 -> 0.5
+           - 0.0 -> 0.5
+           - 5.0 -> 0.5
+           - 45.0 -> 0.5
+           - 50.0 -> 0.5
+           - 55.0 -> 0.5
+           - 60.0 -> 0.0
       - clamp:
           min_value: 0.0
           max_value: 0.5
