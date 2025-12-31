@@ -52,7 +52,7 @@ sensor:
     filters:
       - calibrate_linear:
          method: exact
-         datapoints: ${yambms_charging_rate_table}
+         datapoints: '${yambms_charging_rate_table}'
       - clamp:
           min_value: 0.0
           max_value: 0.5
@@ -80,7 +80,7 @@ sensor:
     filters:
       - calibrate_linear:
          method: exact
-         datapoints: ${yambms_discharging_rate_table}
+         datapoints: '${yambms_discharging_rate_table}'
       - clamp:
           min_value: 0.0
           max_value: 0.5
