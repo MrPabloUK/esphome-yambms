@@ -1,4 +1,4 @@
-# Updated : 2025.12.17
+# Updated : 2025.12.30
 # Version : 1.6.0
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
@@ -96,16 +96,6 @@ substitutions:
   # Max. discharge current : corresponds to the maximum discharge current which may be requested by YamBMS.
   # The current requested will be proportional to the BMS count without ever exceeding this value.
   yambms_max_requested_discharge_current: '300' # in Ampere
-  # +-------------------------------------------------------------------------
-  # | Temperature-based current limitation
-  # | Can be disabled via the switch "Temperature-based current limitation"
-  # | This factor is applied to the battery capacity (Ah), not the current 
-  # | maximum charge/discharge current. For example : 280Ah x 0.5 = 140A
-  # +-------------------------------------------------------------------------
-  # Charge rate >= temp. °C :      0,    5,  10,  15,  20,  25,  45,  50,  55,  60  
-  yambms_charging_rate_table: '{0.05, 0.12, 0.3, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.0}'
-  # Discharge rate <= temp. °C :   -30, -20, -10,  -5,   0,   5,  45,  50,  55,  60
-  yambms_discharging_rate_table: '{0.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.0}'
   # +--------------------------------------+
   # | Shunt Settings                       |
   # +--------------------------------------+
@@ -240,7 +230,7 @@ packages:
       - path: 'packages/bms/bms_combine_JBD_UART_full.yaml'
         vars:
           bms_id: '1' # must be a number
-          bms_name: 'BMS 1'
+          bms_name: 'JBD-BMS 1'
           bms_uart_id: 'uart_esp_1'
           bms_rx_timeout: '150ms'
           # Required settings cannot be retrieved from BMS
@@ -258,7 +248,7 @@ packages:
       - path: 'packages/bms/bms_combine_JBD_BLE_full.yaml'
         vars:
           bms_id: '2' # must be a number
-          bms_name: 'BMS 2'
+          bms_name: 'JBD-BMS 2'
           bms_ble_mac_address: 'C8:47:8C:10:7E:AA' # Your MAC address
           # Required settings cannot be retrieved from BMS
           # These values ​​must match your BMS settings
