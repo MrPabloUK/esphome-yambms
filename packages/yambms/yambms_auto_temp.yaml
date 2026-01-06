@@ -1,5 +1,5 @@
-# Updated : 2025.12.30
-# Version : 1.0.0
+# Updated : 2025.01.06
+# Version : 1.0.1
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
 # YamBMS ( Yet another multi-BMS Merging Solution )
@@ -56,6 +56,7 @@ sensor:
       auto& rate_table   = id(charging_table);
       float max_current  = id(${yambms_id}_max_charge_current).state;
       auto& output_id    = id(${yambms_id}_auto_temperature_ccl);
+      float alpha        = 0.05f;
 
       // Check switch enabled
       if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) {
@@ -84,7 +85,6 @@ sensor:
         s_max_temp = raw_max;
       } else {
         // Apply smoothing only when data is stable
-        float alpha = 0.15f;
         s_min_temp = (alpha * raw_min) + (1.0f - alpha) * s_min_temp;
         s_max_temp = (alpha * raw_max) + (1.0f - alpha) * s_max_temp;
       }
@@ -131,6 +131,7 @@ sensor:
       auto& rate_table   = id(discharging_table);
       float max_current  = id(${yambms_id}_max_discharge_current).state;
       auto& output_id    = id(${yambms_id}_auto_temperature_dcl);
+      float alpha        = 0.05f;
 
       // Check switch enabled
       if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) {
@@ -159,7 +160,6 @@ sensor:
         s_max_temp = raw_max;
       } else {
         // Apply smoothing only when data is stable
-        float alpha = 0.15f;
         s_min_temp = (alpha * raw_min) + (1.0f - alpha) * s_min_temp;
         s_max_temp = (alpha * raw_max) + (1.0f - alpha) * s_max_temp;
       }
