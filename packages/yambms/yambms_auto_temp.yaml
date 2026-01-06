@@ -108,6 +108,11 @@ sensor:
       // Clamp and round
       if (delta > 0.0f) delta = 0.0f;
       delta = roundf(delta * 10.0f) / 10.0f;
+
+      // LOGGING
+      ESP_LOGI("YamBMS_CCL", "Temp Raw:%.1f, Filtered:%.1f | Rate:%.3f | Target:%.1fA | Delta:%.1f", 
+               raw_min, s_min_temp, allowed_rate, target_current, delta);
+
       id(${yambms_id}_auto_temperature_ccl) = delta;
       return delta;
 
