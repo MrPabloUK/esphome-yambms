@@ -24,6 +24,15 @@
   # | maximum charge/discharge current. For example : 280Ah x 0.5 = 140A      |
   # +-------------------------------------------------------------------------
 
+globals:
+  - id: charging_table
+    type: std::map<float, float>
+    initial_value: '${yambms_charging_rate_table}'
+
+  - id: discharging_table
+    type: std::map<float, float>
+    initial_value: '${yambms_discharging_rate_table}'
+
 switch:
   - platform: template
     name: "${name} ${yambms_name} Temperature-based Current Limitation"
@@ -36,85 +45,137 @@ sensor:
   # +---------------------------------------+
   # | Auto Charge Current Temperature Limit |
   # +---------------------------------------+
-  
-  - platform: copy
-    source_id: ${yambms_id}_min_temperature
+  - platform: template
     id: auto_ccl_temp_limit
-    unit_of_measurement: A
+    unit_of_measurement: "A"
     device_class: current
     internal: true
-    filters:
-      - calibrate_linear:
-         method: exact
-         datapoints:
-         # Temperature -> Charge Rate
-           - 0.0 -> 0.05
-           - 5.0 -> 0.12
-           - 10.0 -> 0.3
-           - 15.0 -> 0.5
-           - 20.0 -> 0.5
-           - 25.0 -> 0.5
-           - 45.0 -> 0.5
-           - 50.0 -> 0.5
-           - 55.0 -> 0.5
-           - 60.0 -> 0.0
-      - clamp:
-          min_value: 0.0
-          max_value: 0.5
-      - lambda: |-
-          float result = 0.0;
-          if (id(${yambms_id}_switch_temperature_based_current_limitation).state) {
-            float batt_capacity = id(${yambms_id}_battery_capacity).state; 
-            float max_current = id(${yambms_id}_max_charge_current).state;
+    update_interval: ${yambms_update_interval}
+    lambda: |-
+      // Check if the logic is enabled via the switch
+      if (!id(temp_limit_switch).state) {
+        return 0.0f; 
+      }
 
-            result = x * batt_capacity;
-            result = result - max_current;
-            result = min(0.0f, result);
-            result = roundf(result * 10.0f) / 10.0f;
-          }
+      // Static variables
+      static float s_min_temp = 20.0f;
+      static float s_max_temp = 20.0f;
+      static bool initial_run = true;
 
-          id(${yambms_id}_auto_temperature_ccl) = result;
-          return result;
+      float raw_min = id(raw_min_temp_sensor).state;
+      float raw_max = id(raw_max_temp_sensor).state;
+
+      if (isnan(raw_min) || isnan(raw_max)) return 0.0f;
+
+      if (initial_run) {
+        s_min_temp = raw_min;
+        s_max_temp = raw_max;
+        initial_run = false;
+      }
+
+      // Input Smoothing
+      float alpha = 0.15f;
+      s_min_temp = (alpha * raw_min) + ((1.0f - alpha) * s_min_temp);
+      s_max_temp = (alpha * raw_max) + ((1.0f - alpha) * s_max_temp);
+
+      // Interpolation
+      auto interpolate = [](const std::map<float, float>& m, float x) -> float {
+        if (m.empty()) return 0.0f;
+        if (x <= m.begin()->first) return m.begin()->second;
+        if (x >= m.rbegin()->first) return m.rbegin()->second;
+        auto it_upper = m.upper_bound(x);
+        auto it_lower = std::prev(it_upper);
+        float x0 = it_lower->first, y0 = it_lower->second;
+        float x1 = it_upper->first, y1 = it_upper->second;
+        return y0 + (x - x0) * ((y1 - y0) / (x1 - x0));
+      };
+
+      // Calculate allowed current
+      float rate_low = interpolate(id(charging_table), s_min_temp);
+      float rate_high = interpolate(id(charging_table), s_max_temp);
+      float allowed_rate = std::min(rate_low, rate_high);
+
+      // Calculate current delta
+      float batt_capacity = id(battery_capacity_sensor).state; // e.g., 280
+      float max_charge_current = id(max_charge_current_sensor).state; // e.g., 100
+      
+      float target_current = allowed_rate * batt_capacity;
+      
+      // Delta = Target - Max. 
+      // If Target is 30A and Max is 100A, Delta is -70A.
+      float delta = target_current - max_charge_current;
+
+      // Clamp and round
+      if (delta > 0.0f) delta = 0.0f;
+      delta = roundf(delta * 10.0f) / 10.0f;
+      id(${yambms_id}_auto_temperature_ccl) = delta;
+      return delta;
 
   # +------------------------------------------+
   # | Auto Discharge Current Temperature Limit |
   # +------------------------------------------+
-  
-  - platform: copy
-    source_id: ${yambms_id}_min_temperature
+  - platform: template
     id: auto_dcl_temp_limit
-    unit_of_measurement: A
+    unit_of_measurement: "A"
     device_class: current
     internal: true
-    filters:
-      - calibrate_linear:
-         method: exact
-         datapoints:
-         # Temperature -> Discharge Rate
-           - -30.0 -> 0.0
-           - -20.0 -> 0.5
-           - -10.0 -> 0.5
-           - -5.0 -> 0.5
-           - 0.0 -> 0.5
-           - 5.0 -> 0.5
-           - 45.0 -> 0.5
-           - 50.0 -> 0.5
-           - 55.0 -> 0.5
-           - 60.0 -> 0.0
-      - clamp:
-          min_value: 0.0
-          max_value: 0.5
-      - lambda: |-
-          float result = 0.0;
-          if (id(${yambms_id}_switch_temperature_based_current_limitation).state) {
-            float batt_capacity = id(${yambms_id}_battery_capacity).state; 
-            float max_current = id(${yambms_id}_max_discharge_current).state;
+    update_interval: ${yambms_update_interval}
+    lambda: |-
+      // Check if the logic is enabled via the switch
+      if (!id(temp_limit_switch).state) {
+        return 0.0f; 
+      }
 
-            result = x * batt_capacity;
-            result = result - max_current;
-            result = min(0.0f, result);
-            result = roundf(result * 10.0f) / 10.0f;
-          }
+      // Static variables
+      static float s_min_temp = 20.0f;
+      static float s_max_temp = 20.0f;
+      static bool initial_run = true;
 
-          id(${yambms_id}_auto_temperature_dcl) = result;
-          return result;
+      float raw_min = id(raw_min_temp_sensor).state;
+      float raw_max = id(raw_max_temp_sensor).state;
+
+      if (isnan(raw_min) || isnan(raw_max)) return 0.0f;
+
+      if (initial_run) {
+        s_min_temp = raw_min;
+        s_max_temp = raw_max;
+        initial_run = false;
+      }
+
+      // Input Smoothing
+      float alpha = 0.15f;
+      s_min_temp = (alpha * raw_min) + ((1.0f - alpha) * s_min_temp);
+      s_max_temp = (alpha * raw_max) + ((1.0f - alpha) * s_max_temp);
+
+      // Interpolation
+      auto interpolate = [](const std::map<float, float>& m, float x) -> float {
+        if (m.empty()) return 0.0f;
+        if (x <= m.begin()->first) return m.begin()->second;
+        if (x >= m.rbegin()->first) return m.rbegin()->second;
+        auto it_upper = m.upper_bound(x);
+        auto it_lower = std::prev(it_upper);
+        float x0 = it_lower->first, y0 = it_lower->second;
+        float x1 = it_upper->first, y1 = it_upper->second;
+        return y0 + (x - x0) * ((y1 - y0) / (x1 - x0));
+      };
+
+      // Calculate allowed current
+      float rate_low = interpolate(id(discharging_table), s_min_temp);
+      float rate_high = interpolate(id(discharging_table), s_max_temp);
+      float allowed_rate = std::min(rate_low, rate_high);
+
+      // Calculate current delta
+      float batt_capacity = id(battery_capacity_sensor).state; // e.g., 280
+      float max_discharge_current = id(max_discharge_current_sensor).state; // e.g., 100
+      
+      float target_current = allowed_rate * batt_capacity;
+      
+      // Delta = Target - Max. 
+      // If Target is 30A and Max is 100A, Delta is -70A.
+      float delta = target_current - max_discharge_current;
+
+      // Clamp and round
+      if (delta > 0.0f) delta = 0.0f;
+      delta = roundf(delta * 10.0f) / 10.0f;
+      id(${yambms_id}_auto_temperature_dcl) = delta;
+      return delta;
