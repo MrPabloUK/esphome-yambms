@@ -67,10 +67,16 @@ sensor:
       // Exit if sensors aren't ready
       if (isnan(raw_min) || isnan(raw_max)) return 0.0f;
 
-      // Update with actual temperature data
-      if (isnan(s_min_temp)) {
+      // If first run (NAN) OR if the difference is > 5.0°C (potentially indicates a boot glitch)
+      if (isnan(s_min_temp) || std::abs(raw_min - s_min_temp) > 5.0f || std::abs(raw_max - s_max_temp) > 5.0f) {
         s_min_temp = raw_min;
         s_max_temp = raw_max;
+        ESP_LOGI("YamBMS_CCL", "Filter Snapped to Reality: %.1f°C", raw_min);
+      } else {
+        // Normal Input Smoothing
+        float alpha = 0.15f;
+        s_min_temp = (alpha * raw_min) + ((1.0f - alpha) * s_min_temp);
+        s_max_temp = (alpha * raw_max) + ((1.0f - alpha) * s_max_temp);
       }
 
       // Input Smoothing
