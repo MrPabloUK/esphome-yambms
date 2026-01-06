@@ -57,20 +57,20 @@ sensor:
         return 0.0f; 
       }
 
-      // Static variables
-      static float s_min_temp = 20.0f;
-      static float s_max_temp = 20.0f;
-      static bool initial_run = true;
+      // Variables
+      static float s_min_temp = NAN;
+      static float s_max_temp = NAN;
 
       float raw_min = id(${yambms_id}_min_temperature).state;
       float raw_max = id(${yambms_id}_max_temperature).state;
 
+      // Exit if sensors aren't ready
       if (isnan(raw_min) || isnan(raw_max)) return 0.0f;
 
-      if (initial_run) {
+      // Update with actual temperature data
+      if (isnan(s_min_temp)) {
         s_min_temp = raw_min;
         s_max_temp = raw_max;
-        initial_run = false;
       }
 
       // Input Smoothing
@@ -126,20 +126,20 @@ sensor:
         return 0.0f; 
       }
 
-      // Static variables
-      static float s_min_temp = 20.0f;
-      static float s_max_temp = 20.0f;
-      static bool initial_run = true;
+      // Variables
+      static float s_min_temp = NAN;
+      static float s_max_temp = NAN;
 
       float raw_min = id(${yambms_id}_min_temperature).state;
       float raw_max = id(${yambms_id}_max_temperature).state;
 
+      // Exit if sensors aren't ready
       if (isnan(raw_min) || isnan(raw_max)) return 0.0f;
 
-      if (initial_run) {
+      // Update with actual temperature data
+      if (isnan(s_min_temp)) {
         s_min_temp = raw_min;
         s_max_temp = raw_max;
-        initial_run = false;
       }
 
       // Input Smoothing
