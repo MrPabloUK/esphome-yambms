@@ -53,7 +53,7 @@ sensor:
     update_interval: ${yambms_update_interval}
     lambda: |-
       // Check if the logic is enabled via the switch
-      if (!id(temp_limit_switch).state) {
+      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) {
         return 0.0f; 
       }
 
@@ -62,8 +62,8 @@ sensor:
       static float s_max_temp = 20.0f;
       static bool initial_run = true;
 
-      float raw_min = id(raw_min_temp_sensor).state;
-      float raw_max = id(raw_max_temp_sensor).state;
+      float raw_min = ${yambms_id}_min_temperature;
+      float raw_max = ${yambms_id}_max_temperature;
 
       if (isnan(raw_min) || isnan(raw_max)) return 0.0f;
 
@@ -96,8 +96,8 @@ sensor:
       float allowed_rate = std::min(rate_low, rate_high);
 
       // Calculate current delta
-      float batt_capacity = id(battery_capacity_sensor).state; // e.g., 280
-      float max_charge_current = id(max_charge_current_sensor).state; // e.g., 100
+      float batt_capacity = id(${yambms_id}_battery_capacity).state;
+      float max_charge_current = id(${yambms_id}_max_charge_current).state;
       
       float target_current = allowed_rate * batt_capacity;
       
@@ -122,7 +122,7 @@ sensor:
     update_interval: ${yambms_update_interval}
     lambda: |-
       // Check if the logic is enabled via the switch
-      if (!id(temp_limit_switch).state) {
+      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) {
         return 0.0f; 
       }
 
@@ -131,8 +131,8 @@ sensor:
       static float s_max_temp = 20.0f;
       static bool initial_run = true;
 
-      float raw_min = id(raw_min_temp_sensor).state;
-      float raw_max = id(raw_max_temp_sensor).state;
+      float raw_min = ${yambms_id}_min_temperature;
+      float raw_max = ${yambms_id}_max_temperature;
 
       if (isnan(raw_min) || isnan(raw_max)) return 0.0f;
 
@@ -165,8 +165,8 @@ sensor:
       float allowed_rate = std::min(rate_low, rate_high);
 
       // Calculate current delta
-      float batt_capacity = id(battery_capacity_sensor).state; // e.g., 280
-      float max_discharge_current = id(max_discharge_current_sensor).state; // e.g., 100
+      float batt_capacity = id(${yambms_id}_battery_capacity).state;
+      float max_discharge_current = id(${yambms_id}_max_discharge_current).state;
       
       float target_current = allowed_rate * batt_capacity;
       
