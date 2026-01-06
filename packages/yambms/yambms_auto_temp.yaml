@@ -58,9 +58,10 @@ sensor:
       auto& output_id    = id(${yambms_id}_auto_temperature_ccl);
 
       // Check switch enabled
-      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state)
+      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) {
         output_id = 0.0f;
         return 0.0f;
+      }
 
       // Define raw inputs
       float raw_min = id(${yambms_id}_min_temperature).state;
@@ -68,9 +69,10 @@ sensor:
       float batt_capacity = id(${yambms_id}_battery_capacity).state;
 
       // Exit if critical data is missing
-      if (isnan(raw_min) || isnan(raw_max) || isnan(batt_capacity))
+      if (isnan(raw_min) || isnan(raw_max) || isnan(batt_capacity)) {
         output_id = 0.0f;
         return 0.0f;
+      }
 
       // Setup static variables
       static float s_min_temp = NAN;
@@ -131,9 +133,10 @@ sensor:
       auto& output_id    = id(${yambms_id}_auto_temperature_dcl);
 
       // Check switch enabled
-      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state)
+      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) {
         output_id = 0.0f;
         return 0.0f;
+      }
 
       // Define raw inputs
       float raw_min = id(${yambms_id}_min_temperature).state;
@@ -141,9 +144,10 @@ sensor:
       float batt_capacity = id(${yambms_id}_battery_capacity).state;
 
       // Exit if critical data is missing
-      if (isnan(raw_min) || isnan(raw_max) || isnan(batt_capacity))
+      if (isnan(raw_min) || isnan(raw_max) || isnan(batt_capacity)) {
         output_id = 0.0f;
         return 0.0f;
+      }
 
       // Setup static variables
       static float s_min_temp = NAN;
