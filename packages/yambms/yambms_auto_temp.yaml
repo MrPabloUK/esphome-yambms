@@ -52,13 +52,15 @@ sensor:
     internal: true
     update_interval: ${yambms_update_interval}
     lambda: |-
-      // Check switch enabled
-      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) return 0.0f;
-
       // Configuration
       auto& rate_table   = id(charging_table);
       float max_current  = id(${yambms_id}_max_charge_current).state;
       auto& output_id    = id(${yambms_id}_auto_temperature_ccl);
+
+      // Check switch enabled
+      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state)
+        output_id = 0.0f;
+        return 0.0f;
 
       // Define raw inputs
       float raw_min = id(${yambms_id}_min_temperature).state;
@@ -66,7 +68,9 @@ sensor:
       float batt_capacity = id(${yambms_id}_battery_capacity).state;
 
       // Exit if critical data is missing
-      if (isnan(raw_min) || isnan(raw_max) || isnan(batt_capacity)) return 0.0f;
+      if (isnan(raw_min) || isnan(raw_max) || isnan(batt_capacity))
+        output_id = 0.0f;
+        return 0.0f;
 
       // Setup static variables
       static float s_min_temp = NAN;
@@ -121,13 +125,15 @@ sensor:
     internal: true
     update_interval: ${yambms_update_interval}
     lambda: |-
-      // Check switch enabled
-      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) return 0.0f;
-
       // Configuration
       auto& rate_table   = id(discharging_table);
       float max_current  = id(${yambms_id}_max_discharge_current).state;
       auto& output_id    = id(${yambms_id}_auto_temperature_dcl);
+
+      // Check switch enabled
+      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state)
+        output_id = 0.0f;
+        return 0.0f;
 
       // Define raw inputs
       float raw_min = id(${yambms_id}_min_temperature).state;
@@ -135,7 +141,9 @@ sensor:
       float batt_capacity = id(${yambms_id}_battery_capacity).state;
 
       // Exit if critical data is missing
-      if (isnan(raw_min) || isnan(raw_max) || isnan(batt_capacity)) return 0.0f;
+      if (isnan(raw_min) || isnan(raw_max) || isnan(batt_capacity))
+        output_id = 0.0f;
+        return 0.0f;
 
       // Setup static variables
       static float s_min_temp = NAN;
