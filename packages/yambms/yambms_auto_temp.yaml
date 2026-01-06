@@ -52,39 +52,38 @@ sensor:
     internal: true
     update_interval: ${yambms_update_interval}
     lambda: |-
-      // Check if the logic is enabled via the switch
-      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) {
-        return 0.0f; 
-      }
+      // Check switch enabled
+      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) return 0.0f;
 
-      // Variables
+      // Configuration
+      auto& rate_table   = id(charging_table);
+      float max_current  = id(${yambms_id}_max_charge_current).state;
+      auto& output_id    = id(${yambms_id}_auto_temperature_ccl);
+
+      // Define raw inputs
+      float raw_min = id(${yambms_id}_min_temperature).state;
+      float raw_max = id(${yambms_id}_max_temperature).state;
+      float batt_capacity = id(${yambms_id}_battery_capacity).state;
+
+      // Exit if critical data is missing
+      if (isnan(raw_min) || isnan(raw_max) || isnan(batt_capacity)) return 0.0f;
+
+      // Setup static variables
       static float s_min_temp = NAN;
       static float s_max_temp = NAN;
 
-      float raw_min = id(${yambms_id}_min_temperature).state;
-      float raw_max = id(${yambms_id}_max_temperature).state;
-
-      // Exit if sensors aren't ready
-      if (isnan(raw_min) || isnan(raw_max)) return 0.0f;
-
-      // If first run (NAN) OR if the difference is > 5.0°C (potentially indicates a boot glitch)
+      // Instantly match sensor if first run or if temperature changes by > 5°C
       if (isnan(s_min_temp) || std::abs(raw_min - s_min_temp) > 5.0f || std::abs(raw_max - s_max_temp) > 5.0f) {
         s_min_temp = raw_min;
         s_max_temp = raw_max;
-        ESP_LOGI("YamBMS_CCL", "Filter Snapped to Reality: %.1f°C", raw_min);
       } else {
-        // Normal Input Smoothing
+        // Apply smoothing only when data is stable
         float alpha = 0.15f;
-        s_min_temp = (alpha * raw_min) + ((1.0f - alpha) * s_min_temp);
-        s_max_temp = (alpha * raw_max) + ((1.0f - alpha) * s_max_temp);
+        s_min_temp = (alpha * raw_min) + (1.0f - alpha) * s_min_temp;
+        s_max_temp = (alpha * raw_max) + (1.0f - alpha) * s_max_temp;
       }
 
-      // Input Smoothing
-      float alpha = 0.15f;
-      s_min_temp = (alpha * raw_min) + ((1.0f - alpha) * s_min_temp);
-      s_max_temp = (alpha * raw_max) + ((1.0f - alpha) * s_max_temp);
-
-      // Interpolation
+      // Interpolation function
       auto interpolate = [](const std::map<float, float>& m, float x) -> float {
         if (m.empty()) return 0.0f;
         if (x <= m.begin()->first) return m.begin()->second;
@@ -96,30 +95,20 @@ sensor:
         return y0 + (x - x0) * ((y1 - y0) / (x1 - x0));
       };
 
-      // Calculate allowed current
-      float rate_low = interpolate(id(charging_table), s_min_temp);
-      float rate_high = interpolate(id(charging_table), s_max_temp);
+      // Determine high and low C-rate
+      float rate_low = interpolate(rate_table, s_min_temp);
+      float rate_high = interpolate(rate_table, s_max_temp);
       float allowed_rate = std::min(rate_low, rate_high);
 
-      // Calculate current delta
-      float batt_capacity = id(${yambms_id}_battery_capacity).state;
-      float max_charge_current = id(${yambms_id}_max_charge_current).state;
-      
       float target_current = allowed_rate * batt_capacity;
-      
-      // Delta = Target - Max. 
-      // If Target is 30A and Max is 100A, Delta is -70A.
-      float delta = target_current - max_charge_current;
+      float delta = target_current - max_current;
 
-      // Clamp and round
+      // Current can only be reduced
       if (delta > 0.0f) delta = 0.0f;
       delta = roundf(delta * 10.0f) / 10.0f;
 
-      // LOGGING
-      ESP_LOGI("YamBMS_CCL", "Temp Raw:%.1f, Filtered:%.1f | Rate:%.3f | Target:%.1fA | Delta:%.1f", 
-               raw_min, s_min_temp, allowed_rate, target_current, delta);
-
-      id(${yambms_id}_auto_temperature_ccl) = delta;
+      // Update global and return output
+      output_id = delta;
       return delta;
 
   # +------------------------------------------+
@@ -132,33 +121,38 @@ sensor:
     internal: true
     update_interval: ${yambms_update_interval}
     lambda: |-
-      // Check if the logic is enabled via the switch
-      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) {
-        return 0.0f; 
-      }
+      // Check switch enabled
+      if (!id(${yambms_id}_switch_temperature_based_current_limitation).state) return 0.0f;
 
-      // Variables
+      // Configuration
+      auto& rate_table   = id(discharging_table);
+      float max_current  = id(${yambms_id}_max_discharge_current).state;
+      auto& output_id    = id(${yambms_id}_auto_temperature_dcl);
+
+      // Define raw inputs
+      float raw_min = id(${yambms_id}_min_temperature).state;
+      float raw_max = id(${yambms_id}_max_temperature).state;
+      float batt_capacity = id(${yambms_id}_battery_capacity).state;
+
+      // Exit if critical data is missing
+      if (isnan(raw_min) || isnan(raw_max) || isnan(batt_capacity)) return 0.0f;
+
+      // Setup static variables
       static float s_min_temp = NAN;
       static float s_max_temp = NAN;
 
-      float raw_min = id(${yambms_id}_min_temperature).state;
-      float raw_max = id(${yambms_id}_max_temperature).state;
-
-      // Exit if sensors aren't ready
-      if (isnan(raw_min) || isnan(raw_max)) return 0.0f;
-
-      // Update with actual temperature data
-      if (isnan(s_min_temp)) {
+      // Instantly match sensor if first run or if temperature changes by > 5°C
+      if (isnan(s_min_temp) || std::abs(raw_min - s_min_temp) > 5.0f || std::abs(raw_max - s_max_temp) > 5.0f) {
         s_min_temp = raw_min;
         s_max_temp = raw_max;
+      } else {
+        // Apply smoothing only when data is stable
+        float alpha = 0.15f;
+        s_min_temp = (alpha * raw_min) + (1.0f - alpha) * s_min_temp;
+        s_max_temp = (alpha * raw_max) + (1.0f - alpha) * s_max_temp;
       }
 
-      // Input Smoothing
-      float alpha = 0.15f;
-      s_min_temp = (alpha * raw_min) + ((1.0f - alpha) * s_min_temp);
-      s_max_temp = (alpha * raw_max) + ((1.0f - alpha) * s_max_temp);
-
-      // Interpolation
+      // Interpolation function
       auto interpolate = [](const std::map<float, float>& m, float x) -> float {
         if (m.empty()) return 0.0f;
         if (x <= m.begin()->first) return m.begin()->second;
@@ -170,23 +164,18 @@ sensor:
         return y0 + (x - x0) * ((y1 - y0) / (x1 - x0));
       };
 
-      // Calculate allowed current
-      float rate_low = interpolate(id(discharging_table), s_min_temp);
-      float rate_high = interpolate(id(discharging_table), s_max_temp);
+      // Determine high and low C-rate
+      float rate_low = interpolate(rate_table, s_min_temp);
+      float rate_high = interpolate(rate_table, s_max_temp);
       float allowed_rate = std::min(rate_low, rate_high);
 
-      // Calculate current delta
-      float batt_capacity = id(${yambms_id}_battery_capacity).state;
-      float max_discharge_current = id(${yambms_id}_max_discharge_current).state;
-      
       float target_current = allowed_rate * batt_capacity;
-      
-      // Delta = Target - Max. 
-      // If Target is 30A and Max is 100A, Delta is -70A.
-      float delta = target_current - max_discharge_current;
+      float delta = target_current - max_current;
 
-      // Clamp and round
+      // Current can only be reduced
       if (delta > 0.0f) delta = 0.0f;
       delta = roundf(delta * 10.0f) / 10.0f;
-      id(${yambms_id}_auto_temperature_dcl) = delta;
+
+      // Update global and return output
+      output_id = delta;
       return delta;
