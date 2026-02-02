@@ -71,17 +71,16 @@ interval:
     then:
       - lambda: |-
           // --- STATIC STATE VARIABLES ---
-          static int current_stage = 0;       // 0:Search/Heartbeat, 1:Blue Header, 2:Red Pips, 3:Gap
-          static int active_category = -1;    // The current Class Index (0-15) being displayed
-          static int pips_count = 0;          // Counter for the blink pattern toggles
-          static uint32_t next_event_ms = 0;  // Timestamp for the next allowed action
-          static bool heartbeat_on = false;   // Toggle state for the healthy heartbeat pulse
+          static int current_stage = 0;       
+          static int active_category = -1;    
+          static int pips_count = 0;          
+          static uint32_t next_event_ms = 0;  
+          static bool heartbeat_on = false;   
 
           // --- NON-BLOCKING TIMER CHECK ---
           uint32_t now = millis();
           if (now < next_event_ms) return;
 
-          // Global brightness setting
           float bri = 0.5;
 
           switch (current_stage) {
@@ -90,14 +89,12 @@ interval:
             // STAGE 0: SEARCH & HEARTBEAT
             // =================================================================
             case 0: 
-              // 1. Circular Scan: Look for the next faulted category
+              // 1. Circular Scan
               for (int i = 1; i <= 16; i++) {
                 int search_target = (active_category + i) % 16;
-                
-                // Check if the bit is set in the mask
                 bool is_faulted = (id(global_system_fault_mask) >> search_target) & 1;
                 
-                // GHOST FILTER: Check if valid LEDs actually exist for this category
+                // CHECK FOR VALID LEDS
                 bool has_valid_led = false;
                 if (is_faulted) {
                     for (auto *ptr : id(global_led_registry)[search_target]) {
@@ -107,60 +104,57 @@ interval:
                         }
                     }
                     if (!has_valid_led) {
-                        // Debug log: Warn that a fault exists but we are skipping it (no LED)
-                        // ESP_LOGW("fault_sm", "Category %d is faulted but has no LEDs! Skipping.", search_target);
+                        // THIS LOG WILL REVEAL THE ISSUE:
+                        ESP_LOGW("fault_sm", "Ghost Fault detected! Cat %d is ON, but no LED assigned. Skipping.", search_target);
                     }
                 }
 
-                // Transition only if faulted AND we have a physical LED to show it on
                 if (is_faulted && has_valid_led) {
                     active_category = search_target;
                     current_stage = 1; 
-                    ESP_LOGD("fault_sm", "Fault found in Cat %d. Starting Sequence.", active_category);
+                    ESP_LOGD("fault_sm", "Fault Found: Cat %d. Moving to Stage 1.", active_category);
                     return; 
                 }
               }
 
-              // 2. Healthy Heartbeat: Runs only if no faults are found above.
+              // 2. Healthy Heartbeat
               if (!id(global_led_registry)[0].empty() && id(global_led_registry)[0][0] != nullptr) {
                 auto call = id(global_led_registry)[0][0]->make_call();
-                
                 if (!heartbeat_on) {
-                  // Pulse ON
                   if (${board_has_rgb}) { 
-                    call.set_rgb(0.0, 1.0, 0.0); // Pure Green
+                    call.set_rgb(0.0, 1.0, 0.0);
                     call.set_brightness(bri);
                   }
                   call.set_state(true); 
-                  // ESP_LOGD("fault_sm", "Heartbeat ON"); 
+                  ESP_LOGD("fault_sm", "Heartbeat ON");  // UNCOMMENTED
                 } else { 
-                  // Pulse OFF
                   call.set_state(false); 
-                  // ESP_LOGD("fault_sm", "Heartbeat OFF");
+                  ESP_LOGD("fault_sm", "Heartbeat OFF"); // UNCOMMENTED
                 }
                 call.perform();
-                
                 heartbeat_on = !heartbeat_on;
                 next_event_ms = now + 1000;
+              } else {
+                 // Debug if Heartbeat is failing to run
+                 // ESP_LOGW("fault_sm", "Heartbeat skipped: No System LED configured.");
               }
               
               active_category = -1;
               return;
 
             // =================================================================
-            // STAGE 1: FAULT HEADER (Blue Pulse)
+            // STAGE 1: HEADER
             // =================================================================
             case 1: 
-              // ESP_LOGD("fault_sm", "Stage 1: Blue Header");
+              ESP_LOGD("fault_sm", "Stage 1: Blue Header Start"); // UNCOMMENTED
               for (size_t i = 0; i < id(global_led_registry)[active_category].size(); i++) {
                 auto *led = id(global_led_registry)[active_category][i];
                 auto &faults = id(global_instance_faults)[active_category];
 
-                // Safety Check: Pointer valid + Index inside bounds + Is Failing
                 if (led != nullptr && i < faults.size() && faults[i]) {
                   auto call = led->make_call();
                   if (${board_has_rgb}) { 
-                    call.set_rgb(0.0, 0.0, 1.0); // Pure Blue
+                    call.set_rgb(0.0, 0.0, 1.0); 
                     call.set_brightness(bri);    
                   }
                   call.set_state(true);
@@ -174,14 +168,13 @@ interval:
               break;
 
             // =================================================================
-            // STAGE 2: IDENTITY PIPS (Red Flashes)
+            // STAGE 2: PIPS
             // =================================================================
             case 2: 
               {
                 int total_toggles = (active_category + 1) * 2; 
                 bool is_on_cycle = (pips_count % 2 != 0); 
                 
-                // Toggle Logic
                 for (size_t i = 0; i < id(global_led_registry)[active_category].size(); i++) {
                    auto *led = id(global_led_registry)[active_category][i];
                    auto &faults = id(global_instance_faults)[active_category];
@@ -190,7 +183,7 @@ interval:
                     auto call = led->make_call();
                     if (is_on_cycle) {
                       if (${board_has_rgb}) { 
-                        call.set_rgb(1.0, 0.0, 0.0); // Pure Red
+                        call.set_rgb(1.0, 0.0, 0.0); 
                         call.set_brightness(bri);    
                       }
                       call.set_state(true);
@@ -203,7 +196,6 @@ interval:
                 
                 pips_count++;
 
-                // Temporal Logic
                 if (pips_count < total_toggles) {
                    int delay = (pips_count > 0 && pips_count % 8 == 0) ? 500 : 150;
                    next_event_ms = now + delay;
@@ -216,17 +208,22 @@ interval:
               break;
 
             // =================================================================
-            // STAGE 3: INTER-SEQUENCE GAP
+            // STAGE 3: GAP (RESET)
             // =================================================================
             case 3: 
-              for (auto *led : id(global_led_registry)[active_category]) {
-                if (led != nullptr) {
-                  auto call = led->make_call();
-                  call.set_state(false);
-                  call.perform();
-                }
+              // Bounds check safety to prevent crash
+              if (active_category >= 0 && active_category < 16) {
+                  for (auto *led : id(global_led_registry)[active_category]) {
+                    if (led != nullptr) {
+                      auto call = led->make_call();
+                      call.set_state(false);
+                      call.perform();
+                    }
+                  }
               }
-              // ESP_LOGD("fault_sm", "Sequence Complete. Returning to Search.");
+              ESP_LOGD("fault_sm", "Stage 3 Complete. Resetting to Search."); // UNCOMMENTED
               current_stage = 0; 
+              // IMPORTANT: No delay here, go straight to search next cycle
+              next_event_ms = now; 
               break;
           }
