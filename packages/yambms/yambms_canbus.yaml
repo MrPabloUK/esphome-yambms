@@ -19,7 +19,7 @@
 
 substitutions:
   # Extended CANBUS ID
-  ext_canbus_id: "rs485${rs485_id}"
+  ext_canbus_id: "canbus${canbus_id}"
   # Use the standard dictionary names defined in device_base_fault_registry.yaml
   diagnostic_class: "CAT_INV_CAN_BUS"
   # The ID of the LED on your board used for this component
