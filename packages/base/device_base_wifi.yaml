@@ -29,7 +29,7 @@ esphome:
       then:
         - lambda: |-
             // Register System
-            id(global_register_led)(${CAT_NETWORK}, 1, id(${status_led_id}));
+            id(global_register_led)(${CAT_NETWORK}, ${network_fault_device_id}, id(${network_status_led_id}));
 
 sensor:
   # https://esphome.io/components/sensor/wifi_signal
