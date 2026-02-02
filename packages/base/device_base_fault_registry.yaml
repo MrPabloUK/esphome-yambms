@@ -35,13 +35,15 @@ globals:
   # Structure: [Component Category (0-15)] -> [Specific Instance ID (0-N)]
   - id: global_instance_faults
     type: std::vector<std::vector<bool>>
-    initial_value: 'std::vector<std::vector<bool>>(16)'
+    initial_value: std::vector<std::vector<bool>>(16) 
+    restore_value: false
 
   # Component Fault Bitmask: A 16-bit summary of the component instance health.
   # If Bit 4 is "1", it means "At least one instance in Category 4 is failing."
   - id: global_system_fault_mask
     type: uint16_t
     initial_value: '0'
+    restore_value: false
 
   # ---------------------------------------------------------
   # Global Function: Update Fault Status

@@ -30,8 +30,17 @@ esphome:
     - priority: 600.0
       then:
         - lambda: |-
-            // Register the diagnostic LED for this component
-            id(global_register_led)(${diagnostic_class}, ${fault_device_id}, (light::LightState*) id(${network_status_led_id}));
+            // Get the pointer to defined LED
+            // If nothing is entered, this points to virtual_status_light
+            light::LightState* final_led = &id(${network_status_led_id});
+
+            // Check if LED is placeholder
+            if (final_led == &id(virtual_status_light)) {
+                final_led = nullptr; // Swap to real nullptr
+            }
+
+            // Register LED
+            id(global_register_led)(${diagnostic_class}, ${fault_device_id}, final_led);
 
 text_sensor:
   # https://esphome.io/components/text_sensor/ethernet_info.html
@@ -53,13 +62,8 @@ interval:
   - interval: 5s
     then:
       - lambda: |-
-            // Register the diagnostic LED for this component
-            std::string led_target = "${network_status_led_id}";
-            light::LightState* final_led = nullptr;
+          // network::is_connected() can be used for wifi or ethernet.
+          // It returns true if Ethernet or WiFi has a valid Link + IP.
+          bool x = network::is_connected();
 
-            if (led_target != "nullptr") {
-              // Only call id() if the user provided a real component name
-              final_led = (light::LightState*) id(${status_led_id});
-            }
-
-            id(global_register_led)(${diagnostic_class}, ${fault_device_id}, final_led);
+          id(global_update_fault)(${diagnostic_class}, ${fault_device_id}, !x);

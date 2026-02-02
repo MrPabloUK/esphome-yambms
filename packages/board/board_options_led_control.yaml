@@ -53,6 +53,13 @@ globals:
       };
 
 
+light:
+# Fake light to act as a placeholder for LED control logic
+  - platform: template
+    id: virtual_status_light
+    output: []     # No physical output
+
+
 interval:
   # This acts as a non-blocking State Machine. It checks the global fault mask
   # and drives the LEDs to display error codes or a healthy heartbeat.

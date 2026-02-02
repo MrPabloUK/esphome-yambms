@@ -23,7 +23,7 @@ substitutions:
   # Use the standard dictionary names defined in device_base_fault_registry.yaml
   diagnostic_class: "${CAT_INV_CAN_BUS}"
   # The ID of the LED on your board used for this component
-  status_led_id: "nullptr"
+  status_led_id: "virtual_status_light"
   # ID for this component instance for fault registry
   fault_device_id: "${canbus_id}"
 
@@ -32,16 +32,18 @@ esphome:
     - priority: 600.0
       then:
         - lambda: |-
-            // Register the diagnostic LED for this component
-            std::string led_target = "${status_led_id}";
-            light::LightState* final_led = nullptr;
+            // Get the pointer to defined LED
+            // If nothing is entered, this points to virtual_status_light
+            light::LightState* final_led = &id(${status_led_id});
 
-            if (led_target != "nullptr") {
-              // Only call id() if the user provided a real component name
-              final_led = (light::LightState*) id(${status_led_id});
+            // Check if LED is placeholder
+            if (final_led == &id(virtual_status_light)) {
+                final_led = nullptr; // Swap to real nullptr
             }
 
+            // Register LED
             id(global_register_led)(${diagnostic_class}, ${fault_device_id}, final_led);
+            
   devices:
     - id: canbus_${canbus_id}
       name: "${canbus_name}"
