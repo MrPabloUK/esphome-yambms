@@ -27,4 +27,4 @@ esphome:
       then:
         - lambda: |-
             // Register System
-            id(global_register_led)(${CAT_SHUNT}, "${shunt_id}", id(${status_led_id}));
+            id(global_register_led)(${CAT_SHUNT}, ${shunt_id}, id(${status_led_id}));
