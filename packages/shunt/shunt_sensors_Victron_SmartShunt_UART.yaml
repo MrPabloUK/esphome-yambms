@@ -58,7 +58,7 @@ binary_sensor:
       then:
         - lambda: |-
             // Pass the current state to the update function
-            id(global_update_fault)(${CAT_SHUNT}, ${fault_device_id}, !x);
+            id(global_update_fault)(${CAT_SHUNT}, ${shunt_id}, !x);
 
 sensor:
   - platform: victron

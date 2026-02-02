@@ -22,8 +22,6 @@ substitutions:
   ext_rs485_id: "rs485${rs485_id}"
   # The ID of the LED on your board used for this component
   status_led_id: "virtual_status_light"
-  # ID for this component instance for fault registry
-  fault_device_id: "${rs485_id}"
 
 esphome:
   on_boot:
@@ -40,7 +38,7 @@ esphome:
             }
 
             // Register LED
-            id(global_register_led)(${CAT_INV_RS485}, ${fault_device_id}, final_led);
+            id(global_register_led)(${CAT_INV_RS485}, ${rs485_id}, final_led);
 
   devices:
     - id: rs485_${ext_rs485_id}
@@ -190,7 +188,7 @@ binary_sensor:
       then:
         - lambda: |-
             // Pass the current state to the update function
-            id(global_update_fault)(${CAT_INV_RS485}, ${fault_device_id}, !x);
+            id(global_update_fault)(${CAT_INV_RS485}, ${rs485_id}, !x);
 
 interval:
   - interval: 24h

@@ -20,22 +20,11 @@
 substitutions:
   # The ID of the LED on your board used for this component
   status_led_id: "virtual_status_light"
-  # ID for this component instance for fault registry
-  fault_device_id: "${shunt_id}"
 
 esphome:
   on_boot:
     - priority: 600.0
       then:
         - lambda: |-
-            // Get the pointer to defined LED
-            // If nothing is entered, this points to virtual_status_light
-            light::LightState* final_led = id(${status_led_id});
-
-            // Check if LED is placeholder
-            if (final_led == id(virtual_status_light)) {
-                final_led = nullptr; // Swap to real nullptr
-            }
-
-            // Register LED
-            id(global_register_led)(${diagnostic_class}, ${CAT_SHUNT}, final_led);
+            // Register System
+            id(global_register_led)(${CAT_SHUNT}, "${shunt_id}", id(${status_led_id}));

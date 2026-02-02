@@ -71,7 +71,7 @@ binary_sensor:
       then:
         - lambda: |-
             // Pass the current state to the update function
-            id(global_update_fault)(${CAT_BALANCER}, ${fault_device_id}, !x);
+            id(global_update_fault)(${CAT_BALANCER}, ${bms_id}, !x);
     balancing:
       id: balancer${bms_id}_equalizing
       device_id: balancer_${bms_id}

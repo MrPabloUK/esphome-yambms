@@ -22,8 +22,6 @@ substitutions:
   ext_canbus_id: "canbus${canbus_id}"
   # The ID of the LED on your board used for this component
   status_led_id: "virtual_status_light"
-  # ID for this component instance for fault registry
-  fault_device_id: "${canbus_id}"
 
 esphome:
   on_boot:
@@ -40,7 +38,7 @@ esphome:
             }
 
             // Register LED
-            id(global_register_led)(${CAT_INV_CAN_BUS}, ${fault_device_id}, final_led);
+            id(global_register_led)(${CAT_INV_CAN_BUS}, ${canbus_id}, final_led);
             
   devices:
     - id: canbus_${ext_canbus_id}
@@ -145,7 +143,7 @@ binary_sensor:
       then:
         - lambda: |-
             // Pass the current state to the update function
-            id(global_update_fault)(${CAT_INV_CAN_BUS}, ${fault_device_id}, !x);
+            id(global_update_fault)(${CAT_INV_CAN_BUS}, ${canbus_id}, !x);
 
 # +--------------------------------------+
 # | Scripts                              |

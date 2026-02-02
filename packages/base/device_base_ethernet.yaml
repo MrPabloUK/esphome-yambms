@@ -21,7 +21,7 @@ substitutions:
   # The ID of the LED on your board used for this component
   network_status_led_id: "esp_light"
   # ID for this component instance for fault registry
-  fault_device_id: "1"
+  network_device_id: "1"
 
 esphome:
   on_boot:
@@ -55,4 +55,4 @@ interval:
           // It returns true if Ethernet or WiFi has a valid Link + IP.
           bool x = network::is_connected();
 
-          id(global_update_fault)(${CAT_NETWORK}, ${fault_device_id}, !x);
+          id(global_update_fault)(${CAT_NETWORK}, "${network_device_id}", !x);

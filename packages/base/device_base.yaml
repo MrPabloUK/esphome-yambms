@@ -26,7 +26,7 @@ substitutions:
   # The ID of the LED on your board used for this component
   status_led_id: "esp_light"
   # ID for this component instance for fault registry
-  fault_device_id: "1"
+  board_fault_device_id: "1"
 
 esphome:
   on_boot:
@@ -34,7 +34,7 @@ esphome:
       then:
         - lambda: |-
             // Register System
-            id(global_register_led)(${CAT_SYSTEM}, 1, id(${status_led_id}));
+            id(global_register_led)(${CAT_SYSTEM}, ${board_fault_device_id}, id(${status_led_id}));
 
 time:
   # https://esphome.io/components/time/homeassistant
@@ -67,7 +67,7 @@ binary_sensor:
       then:
         - lambda: |-
             // Pass the current state to the update function
-            id(global_update_fault)(${CAT_SYSTEM}, ${fault_device_id}, !x);
+            id(global_update_fault)(${CAT_SYSTEM}, ${board_fault_device_id}, !x);
 
   # Inverter communication status (CANBUS / RS485)
   - platform: template

@@ -20,8 +20,6 @@
 substitutions:
   # The ID of the LED on your board used for this component
   status_led_id: "virtual_status_light"
-  # ID for this component instance for fault registry
-  fault_device_id: "${bms_id}"
 
 esphome:
   on_boot:
