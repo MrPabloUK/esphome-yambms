@@ -23,6 +23,7 @@ substitutions:
 
 packages:
   sub_device: !include balancer_base_sub_device.yaml
+  fault_updater: !include balancer_base_fault_updater.yaml
 
 ota:
   on_begin:

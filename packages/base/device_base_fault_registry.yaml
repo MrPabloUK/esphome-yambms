@@ -31,52 +31,53 @@ globals:
     type: uint16_t
     initial_value: '0'
 
-includes:
-  - source: |
-      // --- CATEGORY DICTIONARY ---
-      // Use these human-readable names in component yaml substitutions, up to 16 categories
-      // #undef commands ensure that even if an add-on package tries to overwite the definition,
-      // the main registry overrides them
-      #undef CAT_SYSTEM
-      #define CAT_SYSTEM        0
+esphome:
+  includes:
+    - source: |
+        // --- CATEGORY DICTIONARY ---
+        // Use these human-readable names in component yaml substitutions, up to 16 categories
+        // #undef commands ensure that even if an add-on package tries to overwite the definition,
+        // the main registry overrides them
+        #undef CAT_SYSTEM
+        #define CAT_SYSTEM        0
 
-      #undef CAT_BMS
-      #define CAT_BMS           1
+        #undef CAT_BMS
+        #define CAT_BMS           1
 
-      #undef CAT_INV_CAN_BUS
-      #define CAT_INV_CAN_BUS   2
+        #undef CAT_INV_CAN_BUS
+        #define CAT_INV_CAN_BUS   2
 
-      #undef CAT_INV_RS485
-      #define CAT_INV_RS485     3
+        #undef CAT_INV_RS485
+        #define CAT_INV_RS485     3
 
-      #undef CAT_SHUNT
-      #define CAT_SHUNT         4
+        #undef CAT_SHUNT
+        #define CAT_SHUNT         4
 
-      #undef CAT_BALANCER
-      #define CAT_BALANCER      5
+        #undef CAT_BALANCER
+        #define CAT_BALANCER      5
 
-      #undef CAT_NETWORK
-      #define CAT_NETWORK       6
+        #undef CAT_NETWORK
+        #define CAT_NETWORK       6
 
-      #undef CAT_AUX_1
-      #define CAT_AUX_1         7
+        #undef CAT_AUX_1
+        #define CAT_AUX_1         7
 
-      using namespace esphome;
+        using namespace esphome;
 
-      /** * API FUNCTION: Updates the fault status of a component.
-       * @param category: The Category ID.
-       * @param instance: The instance ID of the hardware unit.
-       * @param is_failing: True = Fault Active, False = Healthy.
-       */
-      void update_fault_status(int category, int instance, bool is_failing) {
-        int indexed_instance = instance - 1; // Convert to zero-based index
-        if (category < 0 || category >= 16 || indexed_instance < 0) return;
-        
-        // Only update if the instance has been registered/sized correctly
-        if (indexed_instance < id(global_instance_faults)[category].size()) {
-          id(global_instance_faults)[category][indexed_instance] = is_failing;
+        /** * API FUNCTION: Updates the fault status of a component.
+        * @param category: The Category ID.
+        * @param instance: The instance ID of the hardware unit.
+        * @param is_failing: True = Fault Active, False = Healthy.
+        */
+        void update_fault_status(int category, int instance, bool is_failing) {
+          int indexed_instance = instance - 1; // Convert to zero-based index
+          if (category < 0 || category >= 16 || indexed_instance < 0) return;
+          
+          // Only update if the instance has been registered/sized correctly
+          if (indexed_instance < id(global_instance_faults)[category].size()) {
+            id(global_instance_faults)[category][indexed_instance] = is_failing;
+          }
         }
-      }
 
 interval:
   # Summarize faults (Every 250ms)

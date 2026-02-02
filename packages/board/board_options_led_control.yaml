@@ -21,31 +21,32 @@
 substitutions:
   global_status_led: "esp_light"
 
-includes:
-  - source: |
+esphome:
+  includes:
+    - source: |
 
-      using namespace esphome;
+        using namespace esphome;
 
-      /** * API FUNCTION: Registers an LED to the diagnostic system.
-       * @param category: The Category Macro (e.g., CAT_BATTERY).
-       * @param instance: The specific ID of this hardware unit (e.g., BMS ID 2).
-       * @param led: Pointer to the physical light object.
-       */
-      void register_diagnostic_led(int category, int instance, light::LightState* led) {
-        int indexed_instance = instance - 1; // Convert to zero-based index
-        if (category < 0 || category >= 16 || indexed_instance < 0) return;
+        /** * API FUNCTION: Registers an LED to the diagnostic system.
+        * @param category: The Category Macro (e.g., CAT_BATTERY).
+        * @param instance: The specific ID of this hardware unit (e.g., BMS ID 2).
+        * @param led: Pointer to the physical light object.
+        */
+        void register_diagnostic_led(int category, int instance, light::LightState* led) {
+          int indexed_instance = instance - 1; // Convert to zero-based index
+          if (category < 0 || category >= 16 || indexed_instance < 0) return;
 
-        auto &leds = id(global_led_registry)[category];
-        auto &faults = id(global_instance_faults)[category];
+          auto &leds = id(global_led_registry)[category];
+          auto &faults = id(global_instance_faults)[category];
 
-        // Auto-Expansion: If this instance ID is new, grow the vectors to fit it.
-        // This ensures if Battery #7 is added, slots 0-7 are ready.
-        if (leds.size() <= indexed_instance) {
-          leds.resize(indexed_instance + 1, nullptr);
-          faults.resize(indexed_instance + 1, false);
+          // Auto-Expansion: If this instance ID is new, grow the vectors to fit it.
+          // This ensures if Battery #7 is added, slots 0-7 are ready.
+          if (leds.size() <= indexed_instance) {
+            leds.resize(indexed_instance + 1, nullptr);
+            faults.resize(indexed_instance + 1, false);
+          }
+          leds[indexed_instance] = led;
         }
-        leds[indexed_instance] = led;
-      }
 
 globals:
   # 2D grid of physical LED pointers
