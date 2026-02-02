@@ -167,25 +167,38 @@ interval:
             case 2: 
               {
                 int total_toggles = (active_category + 1) * 2; 
-                bool is_on_cycle = (pips_count % 2 != 0); 
+                // Toggle state: pips_count 0=On, 1=Off, 2=On, 3=Off...
+                bool is_on_cycle = (pips_count % 2 == 0); 
+                
                 for (size_t i = 0; i < id(global_led_registry)[active_category].size(); i++) {
                    auto *led = id(global_led_registry)[active_category][i];
                    auto &faults = id(global_instance_faults)[active_category];
                    if (led != nullptr && i < faults.size() && faults[i]) {
                     auto call = led->make_call();
                     if (is_on_cycle) {
-                      if (${board_has_rgb}) { call.set_rgb(1.0, 0.0, 0.0); call.set_brightness(bri); }
+                      if (${board_has_rgb}) { 
+                        call.set_rgb(1.0, 0.0, 0.0); // Red
+                        call.set_brightness(bri); 
+                      }
                       call.set_state(true);
-                    } else { call.set_state(false); }
+                    } else { 
+                      call.set_state(false); 
+                    }
                     call.perform();
                   }
                 }
+                
                 pips_count++;
+
                 if (pips_count < total_toggles) {
+                   // Calculate delay: 500ms after every 4th full pip (8 toggles), else 150ms
                    int delay = (pips_count > 0 && pips_count % 8 == 0) ? 500 : 150;
                    next_event_ms = now + delay;
                 } else {
-                   current_stage = 3; next_event_ms = now + 1000;
+                   // Sequence finished. Wait 150ms for the final 'Off' toggle to be seen
+                   // before jumping to Stage 3's 1000ms pause.
+                   current_stage = 3; 
+                   next_event_ms = now + 150;
                 }
               }
               break;
