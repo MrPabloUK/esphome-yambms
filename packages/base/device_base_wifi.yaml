@@ -19,7 +19,7 @@
 
 substitutions:
   # Use the standard dictionary names defined in device_base_fault_registry.yaml
-  diagnostic_class: "CAT_NETWORK"
+  diagnostic_class: "${CAT_NETWORK}"
   # The ID of the LED on your board used for this component
   network_status_led_id: "esp_light"
   # ID for this component instance for fault registry
@@ -39,7 +39,7 @@ esphome:
               final_led = (light::LightState*) id(${status_led_id});
             }
 
-            register_diagnostic_led(${diagnostic_class}, ${fault_device_id}, final_led);
+            id(global_register_led)(${diagnostic_class}, ${fault_device_id}, final_led);
 
 sensor:
   # https://esphome.io/components/sensor/wifi_signal
@@ -100,4 +100,4 @@ interval:
           // It returns true if Ethernet or WiFi has a valid Link + IP.
           bool x = network::is_connected();
 
-          update_fault_status(${diagnostic_class}, ${fault_device_id}, !x);
+          id(global_update_fault)(${diagnostic_class}, ${fault_device_id}, !x);

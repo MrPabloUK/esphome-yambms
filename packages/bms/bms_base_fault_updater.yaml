@@ -19,7 +19,7 @@
 
 substitutions:
   # Use the standard dictionary names defined in device_base_fault_registry.yaml
-  diagnostic_class: "CAT_BMS"
+  diagnostic_class: "${CAT_BMS}"
   # The ID of the LED on your board used for this component
   status_led_id: "nullptr"
   # ID for this component instance for fault registry
@@ -39,4 +39,4 @@ esphome:
               final_led = (light::LightState*) id(${status_led_id});
             }
 
-            register_diagnostic_led(${diagnostic_class}, ${fault_device_id}, final_led);
+            id(global_register_led)(${diagnostic_class}, ${fault_device_id}, final_led);

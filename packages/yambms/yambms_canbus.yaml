@@ -21,7 +21,7 @@ substitutions:
   # Extended CANBUS ID
   ext_canbus_id: "canbus${canbus_id}"
   # Use the standard dictionary names defined in device_base_fault_registry.yaml
-  diagnostic_class: "CAT_INV_CAN_BUS"
+  diagnostic_class: "${CAT_INV_CAN_BUS}"
   # The ID of the LED on your board used for this component
   status_led_id: "nullptr"
   # ID for this component instance for fault registry
@@ -41,7 +41,7 @@ esphome:
               final_led = (light::LightState*) id(${status_led_id});
             }
 
-            register_diagnostic_led(${diagnostic_class}, ${fault_device_id}, final_led);
+            id(global_register_led)(${diagnostic_class}, ${fault_device_id}, final_led);
   devices:
     - id: canbus_${canbus_id}
       name: "${canbus_name}"
@@ -145,7 +145,7 @@ binary_sensor:
       then:
         - lambda: |-
             // Pass the current state to the update function
-            update_fault_status(${diagnostic_class}, ${fault_device_id}, !x);
+            id(global_update_fault)(${diagnostic_class}, ${fault_device_id}, !x);
 
 # +--------------------------------------+
 # | Scripts                              |

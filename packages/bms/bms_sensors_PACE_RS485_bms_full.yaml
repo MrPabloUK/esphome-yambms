@@ -86,7 +86,7 @@ binary_sensor:
       then:
         - lambda: |-
             // Pass the current state to the update function
-            update_fault_status(${diagnostic_class}, ${fault_device_id}, !x);
+            id(global_update_fault)(${diagnostic_class}, ${fault_device_id}, !x);
 
   #  11  Status/Fault flag                     2 byte   R  uint16  Hex See ^3
   #      Bit 8: Status: Charging operation
