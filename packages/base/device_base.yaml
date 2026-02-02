@@ -130,3 +130,38 @@ text_sensor:
     device_id: ${board_id}
     hide_timestamp: false #true
     entity_category: diagnostic
+
+interval:
+  - interval: 5s
+    startup_delay: 5s # Wait for boot logic to finish
+    count: 1          # Only run once
+    then:
+      - lambda: |-
+          ESP_LOGI("led_audit", "=== LED REGISTRY AUDIT ===");
+          
+          for (int cat = 0; cat < 16; cat++) {
+            // Access the vector for this category
+            auto &leds = id(global_led_registry)[cat];
+            
+            if (leds.empty()) {
+              // If completely empty, just log it as such
+              ESP_LOGI("led_audit", "Cat %d (%s): [EMPTY]", cat, (cat==0?"SYSTEM":(cat==6?"NETWORK":"OTHER")));
+            } else {
+              // If it has slots, check if they are valid pointers or nullptr
+              std::string status = "";
+              for (size_t i = 0; i < leds.size(); i++) {
+                 if (leds[i] == nullptr) {
+                   status += "[NULL] ";
+                 } else {
+                   status += "[OK] ";
+                 }
+              }
+              ESP_LOGI("led_audit", "Cat %d (%s): Size %d -> %s", 
+                cat, 
+                (cat==0?"SYSTEM":(cat==6?"NETWORK":"OTHER")), 
+                leds.size(), 
+                status.c_str()
+              );
+            }
+          }
+          ESP_LOGI("led_audit", "==========================");
