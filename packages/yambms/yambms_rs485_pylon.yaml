@@ -21,24 +21,15 @@ substitutions:
   # Extended ID
   ext_rs485_id: "rs485${rs485_id}"
   # The ID of the LED on your board used for this component
-  status_led_id: "virtual_status_light"
+  rs485_status_led_id: "virtual_status_light"
 
 esphome:
   on_boot:
     - priority: 600.0
       then:
         - lambda: |-
-            // Get the pointer to defined LED
-            // If nothing is entered, this points to virtual_status_light
-            light::LightState* final_led = id(${status_led_id});
-
-            // Check if LED is placeholder
-            if (final_led == id(virtual_status_light)) {
-                final_led = nullptr; // Swap to real nullptr
-            }
-
-            // Register LED
-            id(global_register_led)(${CAT_INV_RS485}, ${rs485_id}, final_led);
+            // Register System
+            id(global_register_led)(${CAT_INV_RS485}, 1, id(${rs485_status_led_id}));
 
   devices:
     - id: rs485_${ext_rs485_id}

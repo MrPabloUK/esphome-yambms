@@ -19,7 +19,7 @@
 
 substitutions:
   # The ID of the LED on your board used for this component
-  status_led_id: "virtual_status_light"
+  balancer_status_led_id: "virtual_status_light"
 
 esphome:
   on_boot:
@@ -27,4 +27,4 @@ esphome:
       then:
         - lambda: |-
             // Register System
-            id(global_register_led)(${CAT_BALANCER}, 1, id(${status_led_id}));
+            id(global_register_led)(${CAT_BALANCER}, 1, id(${balancer_status_led_id}));
