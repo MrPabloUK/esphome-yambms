@@ -28,7 +28,7 @@ packages:
 # +-----------------------------------------------+
 
 canbus:
-  - id: !extend ${canbus_id}
+  - id: !extend ${ext_canbus_id}
     on_frame:
     - can_id: 0x11${deye_module_id}
       then:
