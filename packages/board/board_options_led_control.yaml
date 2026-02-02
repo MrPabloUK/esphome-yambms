@@ -53,11 +53,17 @@ globals:
       };
 
 
-light:
-# Fake light to act as a placeholder for LED control logic
+output:
   - platform: template
+    id: virtual_output
+    type: binary
+    write_action: []
+
+# Fake light to act as a placeholder for LED control logic
+light:
+  - platform: binary
     id: virtual_status_light
-    output: []     # No physical output
+    output: virtual_output
 
 
 interval:
