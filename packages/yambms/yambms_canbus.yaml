@@ -145,8 +145,8 @@ script:
     then:
       - delay: ${canbus_link_timer}
       - lambda: |-
-          id(${ext_canbus_id}_send_canbus_data) = false;                      // Stop sending CANBUS datas
-          id(${ext_canbus_id}_status).publish_state(false);                   // Set CANBUS status to OFF
+          id(${ext_canbus_id}_send_canbus_data) = false;                  // Stop sending CANBUS datas
+          id(${ext_canbus_id}_status).publish_state(false);               // Set CANBUS status to OFF
           id(inverter_com_status).publish_state(false);                   // Set Inverter com. status to OFF
 
 # +--------------------------------------+
@@ -165,7 +165,7 @@ canbus:
               if (id(${ext_canbus_id}_status).state == false) {
                 id(${ext_canbus_id}_send_canbus_data) = true;                    // Sending CANBUS frames allowed
                 id(${ext_canbus_id}_status).publish_state(true);                 // Set CANBUS status to ON
-                id(inverter_com_status).publish_state(true);                 // Set Inverter com. status to ON
+                id(inverter_com_status).publish_state(true);                     // Set Inverter com. status to ON
               }
 
               // Inverter ACK interval
