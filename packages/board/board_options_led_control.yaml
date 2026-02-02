@@ -35,7 +35,7 @@ globals:
   - id: global_register_led
     type: std::function<void(int, int, light::LightState*)>
     initial_value: |-
-      return [](int category, int instance, light::LightState* led) {
+      [](int category, int instance, light::LightState* led) {
         int computer_instance = instance - 1;
         if (category < 0 || category >= 16 || computer_instance < 0) return;
 

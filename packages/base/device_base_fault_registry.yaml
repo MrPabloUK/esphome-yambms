@@ -50,7 +50,7 @@ globals:
     type: std::function<void(int, int, bool)>
     # Function to update fault status
     initial_value: |-
-      return [](int category, int instance, bool is_failing) {
+      [](int category, int instance, bool is_failing) {
         // Convert to zero-based index
         int computer_instance = instance - 1;
 
