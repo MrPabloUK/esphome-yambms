@@ -18,8 +18,6 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
 
 substitutions:
-  # Use the standard dictionary names defined in device_base_fault_registry.yaml
-  diagnostic_class: "${CAT_NETWORK}"
   # The ID of the LED on your board used for this component
   network_status_led_id: "esp_light"
   # ID for this component instance for fault registry
@@ -30,17 +28,8 @@ esphome:
     - priority: 600.0
       then:
         - lambda: |-
-            // Get the pointer to defined LED
-            // If nothing is entered, this points to virtual_status_light
-            light::LightState* final_led = id(${network_status_led_id});
-
-            // Check if LED is placeholder
-            if (final_led == id(virtual_status_light)) {
-                final_led = nullptr; // Swap to real nullptr
-            }
-
-            // Register LED
-            id(global_register_led)(${diagnostic_class}, ${fault_device_id}, final_led);
+            // Register System
+            id(global_register_led)(${CAT_NETWORK}, 1, id(${status_led_id}));
 
 text_sensor:
   # https://esphome.io/components/text_sensor/ethernet_info.html

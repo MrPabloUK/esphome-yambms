@@ -32,23 +32,25 @@ globals:
   # ---------------------------------------------------------
   # Global Function: Update LED assignment
   # ---------------------------------------------------------
-  - id: global_register_led
+- id: global_register_led
     type: std::function<void(int, int, light::LightState*)>
     initial_value: |-
       [](int category, int instance, light::LightState* led) {
+
+        if (led == id(virtual_status_light)) {
+            led = nullptr; 
+        }
+
         int computer_instance = instance - 1;
         if (category < 0 || category >= 16 || computer_instance < 0) return;
 
         auto &leds = id(global_led_registry)[category];
         auto &faults = id(global_instance_faults)[category];
 
-        // Ensure vectors are large enough
         if (leds.size() <= computer_instance) {
           leds.resize(computer_instance + 1, nullptr);
           faults.resize(computer_instance + 1, false);
         }
-        
-        // Assign the LED pointer
         leds[computer_instance] = led;
       }
 
