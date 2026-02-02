@@ -21,7 +21,22 @@ packages:
   device_base_esphome: !include device_base_esphome.yaml
   sub_device: !include device_base_sub_device.yaml
   fault_registry: !include device_base_fault_registry.yaml
-  fault_updater: !include device_base_fault_updater.yaml
+
+substitutions:
+  # Use the standard dictionary names defined in device_base_fault_registry.yaml
+  diagnostic_class: "${CAT_SYSTEM}"
+  # The ID of the LED on your board used for this component
+  status_led_id: "esp_light"
+  # ID for this component instance for fault registry
+  fault_device_id: "1"
+
+esphome:
+  on_boot:
+    - priority: 600.0
+      then:
+        - lambda: |-
+            // Register the diagnostic LED for this component
+            id(global_register_led)(${diagnostic_class}, ${fault_device_id}, (light::LightState*) id(${status_led_id}));
 
 time:
   # https://esphome.io/components/time/homeassistant
