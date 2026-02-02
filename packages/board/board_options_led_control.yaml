@@ -37,7 +37,7 @@ globals:
     initial_value: |-
       [](int category, int instance, light::LightState* led) {
 
-        if (led == id(virtual_status_light)) {
+        if (led == &id(virtual_status_light)) {
             led = nullptr; 
         }
 

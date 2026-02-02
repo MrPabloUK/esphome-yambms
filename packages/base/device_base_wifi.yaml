@@ -90,4 +90,4 @@ interval:
           // It returns true if Ethernet or WiFi has a valid Link + IP.
           bool x = network::is_connected();
 
-          id(global_update_fault)(${diagnostic_class}, ${fault_device_id}, !x);
+          id(global_update_fault)(${CAT_NETWORK}, ${fault_device_id}, !x);
