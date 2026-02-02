@@ -67,39 +67,36 @@ light:
 
 
 interval:
-  # This acts as a non-blocking State Machine. It checks the global fault mask
-  # and drives the LEDs to display error codes or a healthy heartbeat.
   - interval: 50ms
     then:
       - lambda: |-
           // --- STATIC STATE VARIABLES ---
-          static int current_stage = 0;       // 0:Search/Heartbeat, 1:Blue Header, 2:Red Pips, 3:Gap
-          static int active_category = -1;    // The current Class Index (0-15) being displayed
-          static int pips_count = 0;          // Counter for the blink pattern toggles
-          static uint32_t next_event_ms = 0;  // Timestamp for the next allowed action (Non-blocking delay)
-          static bool heartbeat_on = false;   // Toggle state for the healthy heartbeat pulse
+          static int current_stage = 0;       // 0:Search, 1:Blue, 2:Red, 3:Gap
+          static int active_category = -1;    
+          static int pips_count = 0;          
+          static uint32_t next_event_ms = 0;  
+          static bool heartbeat_on = false;   
 
           // --- NON-BLOCKING TIMER CHECK ---
           uint32_t now = millis();
           if (now < next_event_ms) return;
 
-          // Set the global brightness setting for RGB LEDs (0.0 to 1.0)
           float bri = 0.5;
 
           switch (current_stage) {
             
             // =================================================================
             // STAGE 0: SEARCH & HEARTBEAT
-            // Scans the bitmask for faults. If none found, pulses the system LED.
             // =================================================================
             case 0: 
-              // 1. Circular Scan: Look for the next faulted category
+              // 1. Circular Scan
               for (int i = 1; i <= 16; i++) {
                 int search_target = (active_category + i) % 16;
                 
-                // Check if the bit is set in the mask AND if valid LEDs exist for this category
                 bool is_faulted = (id(global_system_fault_mask) >> search_target) & 1;
                 bool has_valid_led = false;
+                
+                // Safe check for valid LED pointers
                 for (auto *ptr : id(global_led_registry)[search_target]) {
                     if (ptr != nullptr) {
                         has_valid_led = true;
@@ -109,30 +106,24 @@ interval:
 
                 if (is_faulted && has_valid_led) {
                     active_category = search_target;
-                    current_stage = 1; // Transition to Fault Display Sequence
+                    current_stage = 1; 
                     return; 
                 }
               }
 
-              // 2. Healthy Heartbeat: Runs only if no faults are found above.
-              // Target Category 0, Instance 0 (The System/Status LED).
+              // 2. Healthy Heartbeat
               if (!id(global_led_registry)[0].empty() && id(global_led_registry)[0][0] != nullptr) {
                 auto call = id(global_led_registry)[0][0]->make_call();
-                
                 if (!heartbeat_on) {
-                  // Pulse ON
                   if (${board_has_rgb}) { 
-                    call.set_rgb(0.0, 1.0, 0.0); // Pure Green
-                    call.set_brightness(bri);    // Apply Variable Brightness
+                    call.set_rgb(0.0, 1.0, 0.0);
+                    call.set_brightness(bri);
                   }
                   call.set_state(true); 
                 } else { 
-                  // Pulse OFF
                   call.set_state(false); 
                 }
                 call.perform();
-                
-                // Toggle state and wait 1 second
                 heartbeat_on = !heartbeat_on;
                 next_event_ms = now + 1000;
               }
@@ -142,16 +133,18 @@ interval:
 
             // =================================================================
             // STAGE 1: FAULT HEADER (Blue Pulse)
-            // A long (1s) Blue signal to alert the user a fault code is starting.
             // =================================================================
             case 1: 
               for (size_t i = 0; i < id(global_led_registry)[active_category].size(); i++) {
-                if (id(global_instance_faults)[active_category][i] && id(global_led_registry)[active_category][i] != nullptr) {
-                  auto call = id(global_led_registry)[active_category][i]->make_call();
-                  
+                // SAFETY FIX: Check pointer AND check vector bounds before accessing faults[i]
+                auto *led = id(global_led_registry)[active_category][i];
+                auto &faults = id(global_instance_faults)[active_category];
+
+                if (led != nullptr && i < faults.size() && faults[i]) {
+                  auto call = led->make_call();
                   if (${board_has_rgb}) { 
-                    call.set_rgb(0.0, 0.0, 1.0); // Pure Blue
-                    call.set_brightness(bri);    // Apply Variable Brightness
+                    call.set_rgb(0.0, 0.0, 1.0); 
+                    call.set_brightness(bri);    
                   }
                   call.set_state(true);
                   call.perform();
@@ -165,7 +158,6 @@ interval:
 
             // =================================================================
             // STAGE 2: IDENTITY PIPS (Red Flashes)
-            // Flashes the LEDs to identify the Category (e.g., Index 4 = 5 Pips)
             // =================================================================
             case 2: 
               {
@@ -173,13 +165,17 @@ interval:
                 bool is_on_cycle = (pips_count % 2 != 0); 
                 
                 for (size_t i = 0; i < id(global_led_registry)[active_category].size(); i++) {
-                  if (id(global_instance_faults)[active_category][i] && id(global_led_registry)[active_category][i] != nullptr) {
-                    auto call = id(global_led_registry)[active_category][i]->make_call();
+                  // SAFETY FIX: Strict bounds checking here too
+                  auto *led = id(global_led_registry)[active_category][i];
+                  auto &faults = id(global_instance_faults)[active_category];
+
+                  if (led != nullptr && i < faults.size() && faults[i]) {
+                    auto call = led->make_call();
                     
                     if (is_on_cycle) {
                       if (${board_has_rgb}) { 
-                        call.set_rgb(1.0, 0.0, 0.0); // Pure Red
-                        call.set_brightness(bri);    // Apply Variable Brightness
+                        call.set_rgb(1.0, 0.0, 0.0); 
+                        call.set_brightness(bri);    
                       }
                       call.set_state(true);
                     } else { 
@@ -191,8 +187,7 @@ interval:
                 
                 pips_count++;
 
-                // Temporal Logic: "Chunking"
-                // Insert a 500ms pause after every 4th pip (8 toggles)
+                // Temporal Logic
                 if (pips_count < total_toggles) {
                    int delay = (pips_count > 0 && pips_count % 8 == 0) ? 500 : 150;
                    next_event_ms = now + delay;
@@ -205,7 +200,6 @@ interval:
 
             // =================================================================
             // STAGE 3: INTER-SEQUENCE GAP
-            // Turns off all LEDs to provide a clean visual break before the next fault.
             // =================================================================
             case 3: 
               for (auto *led : id(global_led_registry)[active_category]) {
