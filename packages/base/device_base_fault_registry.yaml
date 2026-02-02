@@ -60,7 +60,7 @@ globals:
         if (category < 0 || category >= 16 || computer_instance < 0) return;
 
         // Update the fault status
-        // We use 'id' to access the other global variable safely
+        // Use 'id' to access the other global variable safely
         auto &faults = id(global_instance_faults)[category];
         
         // Resize if this is a higher instance ID
@@ -69,7 +69,7 @@ globals:
         }
 
         faults[computer_instance] = is_failing;
-      };
+      }
 
 
 interval:

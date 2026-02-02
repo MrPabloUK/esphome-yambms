@@ -50,7 +50,7 @@ globals:
         
         // Assign the LED pointer
         leds[computer_instance] = led;
-      };
+      }
 
 
 output:
