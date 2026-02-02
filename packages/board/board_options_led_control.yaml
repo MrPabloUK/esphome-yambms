@@ -32,7 +32,7 @@ globals:
   # ---------------------------------------------------------
   # Global Function: Update LED assignment
   # ---------------------------------------------------------
-- id: global_register_led
+  - id: global_register_led
     type: std::function<void(int, int, light::LightState*)>
     initial_value: |-
       [](int category, int instance, light::LightState* led) {
