@@ -133,8 +133,6 @@ text_sensor:
 
 interval:
   - interval: 5s
-    startup_delay: 5s # Wait for boot logic to finish
-    count: 1          # Only run once
     then:
       - lambda: |-
           ESP_LOGI("led_audit", "=== LED REGISTRY AUDIT ===");
