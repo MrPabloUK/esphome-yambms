@@ -17,124 +17,193 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
 
+
 substitutions:
-  # Placeholder light_id if no led is provided
-  light_id: "esp_light"
+  global_status_led: "esp_light"
+
+includes:
+  - source: |
+
+      using namespace esphome;
+
+      /** * API FUNCTION: Registers an LED to the diagnostic system.
+       * @param category: The Category Macro (e.g., CAT_BATTERY).
+       * @param instance: The specific ID of this hardware unit (e.g., BMS ID 2).
+       * @param led: Pointer to the physical light object.
+       */
+      void register_diagnostic_led(int category, int instance, light::LightState* led) {
+        int indexed_instance = instance - 1; // Convert to zero-based index
+        if (category < 0 || category >= 16 || indexed_instance < 0) return;
+
+        auto &leds = id(global_led_registry)[category];
+        auto &faults = id(global_instance_faults)[category];
+
+        // Auto-Expansion: If this instance ID is new, grow the vectors to fit it.
+        // This ensures if Battery #7 is added, slots 0-7 are ready.
+        if (leds.size() <= indexed_instance) {
+          leds.resize(indexed_instance + 1, nullptr);
+          faults.resize(indexed_instance + 1, false);
+        }
+        leds[indexed_instance] = led;
+      }
 
 globals:
-  - id: var_led_state
-    type: int
-    restore_value: no
-    initial_value: '0'
+  # 2D grid of physical LED pointers
+  # Structure: [Component Category (0-15)] -> [Specific Instance ID (0-N)]
+  - id: global_led_registry
+    type: std::vector<std::vector<esphome::light::LightState*>>
+    initial_value: 'std::vector<std::vector<esphome::light::LightState*>>(16)'
+
 
 interval:
-  - interval: 5s
-    then:
-      - lambda: |-
-          // Set LED state
-          auto& led_state = id(var_led_state);
-          const bool esp_ok = id(esp32_online_status).state;
-          const bool com_ok = id(inverter_com_status).state;
-          // 0 : critical | 1 : esp_ok only | 2 : com_ok only | 3 : all OK 
-          led_state = (esp_ok ? 1 : 0) + (com_ok ? 2 : 0);
-          ESP_LOGD("board", "LED state : %d", led_state);
-          
+  # This acts as a non-blocking State Machine. It checks the global fault mask
+  # and drives the LEDs to display error codes or a healthy heartbeat.
   - interval: 50ms
     then:
       - lambda: |-
-          // +============================================================
-          // | Status LED: 4 states, color + counted flashes
-          // |
-          // | state 0 = critical, red,     quad flash
-          // | state 1 = warning,  yellow,  triple flash
-          // | state 2 = info,     blue,    double flash
-          // | state 3 = healthy,  green,   single flash
-          // |
-          // | Timing (aligned to 50ms interval):
-          // | - ON_MS   = 150ms
-          // | - SLOT_MS = 300ms  (150ms ON + 150ms OFF)
-          // | - CYCLE   = 2000ms (includes a pause after the last pulse)
-          // |
-          // | Interval: 50ms
-          // +============================================================
+          // --- STATIC STATE VARIABLES ---
+          static int current_stage = 0;       // 0:Search/Heartbeat, 1:Blue Header, 2:Red Pips, 3:Gap
+          static int active_category = -1;    // The current Class Index (0-15) being displayed
+          static int pips_count = 0;          // Counter for the blink pattern toggles
+          static uint32_t next_event_ms = 0;  // Timestamp for the next allowed action (Non-blocking delay)
+          static bool heartbeat_on = false;   // Toggle state for the healthy heartbeat pulse
 
-          // LED state
-          const auto state = id(var_led_state);
+          // --- NON-BLOCKING TIMER CHECK ---
+          uint32_t now = millis();
+          if (now < next_event_ms) return;
 
-          // If no light was specified then exit
-          esphome::light::LightState *light = ${light_id};
-          if (light == nullptr) return;
+          // Set the global brightness setting for RGB LEDs (0.0 to 1.0)
+          float bri = 0.5;
 
-          // Cache last output so only push changes at edges / state changes
-          static int  last_state = -999;   // -1 means "invalid/off"
-          static bool last_on = false;
+          switch (current_stage) {
+            
+            // =================================================================
+            // STAGE 0: SEARCH & HEARTBEAT
+            // Scans the bitmask for faults. If none found, pulses the system LED.
+            // =================================================================
+            case 0: 
+              // 1. Circular Scan: Look for the next faulted category
+              for (int i = 1; i <= 16; i++) {
+                int search_target = (active_category + i) % 16;
+                
+                // Check if the bit is set in the mask AND if valid LEDs exist for this category
+                bool is_faulted = (id(global_system_fault_mask) >> search_target) & 1;
+                bool has_valid_led = false;
+                for (auto *ptr : id(global_led_registry)[search_target]) {
+                    if (ptr != nullptr) {
+                        has_valid_led = true;
+                        break;
+                    }
+                }
 
-          // Restart flash cycle when the state changes (more readable)
-          static uint32_t base_ms = 0;
+                if (is_faulted && has_valid_led) {
+                    active_category = search_target;
+                    current_stage = 1; // Transition to Fault Display Sequence
+                    return; 
+                }
+              }
 
-          auto turn_off_once = [&]() {
-            if (last_state != -1 || last_on != false) {
-              auto call = light->make_call();
-              call.set_transition_length(0);
-              call.set_state(false);
-              call.perform();
-              last_state = -1;
-              last_on = false;
-            }
-          };
+              // 2. Healthy Heartbeat: Runs only if no faults are found above.
+              // Target Category 0, Instance 0 (The System/Status LED).
+              if (!id(global_led_registry)[0].empty() && id(global_led_registry)[0][0] != nullptr) {
+                auto call = id(global_led_registry)[0][0]->make_call();
+                
+                if (!heartbeat_on) {
+                  // Pulse ON
+                  if (${board_has_rgb}) { 
+                    call.set_rgb(0.0, 1.0, 0.0); // Pure Green
+                    call.set_brightness(bri);    // Apply Variable Brightness
+                  }
+                  call.set_state(true); 
+                } else { 
+                  // Pulse OFF
+                  call.set_state(false); 
+                }
+                call.perform();
+                
+                // Toggle state and wait 1 second
+                heartbeat_on = !heartbeat_on;
+                next_event_ms = now + 1000;
+              }
+              
+              active_category = -1;
+              return;
 
-          // Input is an integer (0..3 expected)
-          // Invalid -> off (on transition)
-          if (state < 0 || state > 3) {
-            turn_off_once();
-            return;
+            // =================================================================
+            // STAGE 1: FAULT HEADER (Blue Pulse)
+            // A long (1s) Blue signal to alert the user a fault code is starting.
+            // =================================================================
+            case 1: 
+              for (size_t i = 0; i < id(global_led_registry)[active_category].size(); i++) {
+                if (id(global_instance_faults)[active_category][i] && id(global_led_registry)[active_category][i] != nullptr) {
+                  auto call = id(global_led_registry)[active_category][i]->make_call();
+                  
+                  if (${board_has_rgb}) { 
+                    call.set_rgb(0.0, 0.0, 1.0); // Pure Blue
+                    call.set_brightness(bri);    // Apply Variable Brightness
+                  }
+                  call.set_state(true);
+                  call.perform();
+                }
+              }
+              
+              current_stage = 2; 
+              pips_count = 0; 
+              next_event_ms = now + 1000;
+              break;
+
+            // =================================================================
+            // STAGE 2: IDENTITY PIPS (Red Flashes)
+            // Flashes the LEDs to identify the Category (e.g., Index 4 = 5 Pips)
+            // =================================================================
+            case 2: 
+              {
+                int total_toggles = (active_category + 1) * 2; 
+                bool is_on_cycle = (pips_count % 2 != 0); 
+                
+                for (size_t i = 0; i < id(global_led_registry)[active_category].size(); i++) {
+                  if (id(global_instance_faults)[active_category][i] && id(global_led_registry)[active_category][i] != nullptr) {
+                    auto call = id(global_led_registry)[active_category][i]->make_call();
+                    
+                    if (is_on_cycle) {
+                      if (${board_has_rgb}) { 
+                        call.set_rgb(1.0, 0.0, 0.0); // Pure Red
+                        call.set_brightness(bri);    // Apply Variable Brightness
+                      }
+                      call.set_state(true);
+                    } else { 
+                      call.set_state(false); 
+                    }
+                    call.perform();
+                  }
+                }
+                
+                pips_count++;
+
+                // Temporal Logic: "Chunking"
+                // Insert a 500ms pause after every 4th pip (8 toggles)
+                if (pips_count < total_toggles) {
+                   int delay = (pips_count > 0 && pips_count % 8 == 0) ? 500 : 150;
+                   next_event_ms = now + delay;
+                } else {
+                   current_stage = 3; 
+                   next_event_ms = now + 1000;
+                }
+              }
+              break;
+
+            // =================================================================
+            // STAGE 3: INTER-SEQUENCE GAP
+            // Turns off all LEDs to provide a clean visual break before the next fault.
+            // =================================================================
+            case 3: 
+              for (auto *led : id(global_led_registry)[active_category]) {
+                if (led != nullptr) {
+                  auto call = led->make_call();
+                  call.set_state(false);
+                  call.perform();
+                }
+              }
+              current_stage = 0; 
+              break;
           }
-
-          // If state changed, restart cycle at t=0
-          if (state != last_state) {
-            base_ms = millis();
-          }
-
-          // --- flash timing constants (multiples of 50ms) ---
-          constexpr uint32_t CYCLE_MS = 2000;
-          constexpr uint32_t SLOT_MS  = 300;   // ON + gap
-          constexpr uint32_t ON_MS    = 150;
-
-          const uint32_t t = (millis() - base_ms) % CYCLE_MS;
-
-          // Pulse counts per state: 0->4, 1->3, 2->2, 3->1
-          constexpr uint8_t PULSES[4] = {4, 3, 2, 1};
-          const uint8_t pulses = PULSES[state];
-
-          const uint32_t slot_index = t / SLOT_MS;
-          const uint32_t slot_pos   = t - (slot_index * SLOT_MS);
-
-          const bool desired_on =
-              (slot_index < pulses) &&
-              (slot_pos < ON_MS);
-
-          // If nothing changes, do nothing
-          if (state == last_state && desired_on == last_on) return;
-
-          auto call = light->make_call();
-          call.set_transition_length(0);
-
-          // RGB mapping (set only when state changes)
-          const bool is_rgb = ${board_has_rgb};
-          if (is_rgb && state != last_state) {
-            call.set_brightness(0.5f);
-
-            switch (state) {
-              case 0: call.set_rgb(1.0f, 0.0f, 0.0f);  break; // Red
-              case 1: call.set_rgb(1.0f, 1.0f, 0.0f);  break; // Yellow
-              case 2: call.set_rgb(0.0f, 0.0f, 1.0f);  break; // Blue
-              case 3: call.set_rgb(0.0f, 1.0f, 0.0f);  break; // Green
-            }
-          }
-
-          // Apply flash (RGB + mono)
-          call.set_state(desired_on);
-          call.perform();
-
-          last_state = state;
-          last_on = desired_on;

@@ -1,5 +1,5 @@
 # Updated : 2026.02.01
-# Version : 2.5.0
+# Version : 2.5.1
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
 # YamBMS ( Yet another multi-BMS Merging Solution )
@@ -17,7 +17,23 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
 
+substitutions:
+  # Extended CANBUS ID
+  ext_canbus_id: "rs485${rs485_id}"
+  # Use the standard dictionary names defined in device_base_fault_registry.yaml
+  diagnostic_class: "CAT_INV_CAN_BUS"
+  # The ID of the LED on your board used for this component
+  status_led_id: "nullptr"
+  # ID for this component instance for fault registry
+  fault_device_id: "${canbus_id}"
+
 esphome:
+  on_boot:
+    - priority: 600.0
+      then:
+        - lambda: |-
+            // Register the diagnostic LED for this component
+            register_diagnostic_led(${diagnostic_class}, ${fault_device_id}, (light::LightState*) id(${status_led_id}));
   devices:
     - id: canbus_${canbus_id}
       name: "${canbus_name}"
@@ -117,6 +133,11 @@ binary_sensor:
     device_id: canbus_${canbus_id}
     name: "Status"
     entity_category: diagnostic
+    on_state:
+      then:
+        - lambda: |-
+            // Pass the current state to the update function
+            update_fault_status(${diagnostic_class}, ${fault_device_id}, !x);
 
 # +--------------------------------------+
 # | Scripts                              |

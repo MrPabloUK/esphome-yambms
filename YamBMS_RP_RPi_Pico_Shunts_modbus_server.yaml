@@ -1,5 +1,5 @@
-# Updated : 2026.01.14
-# Version : 1.6.0
+# Updated : 2026.02.01
+# Version : 1.6.1
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
 # YamBMS ( Yet another multi-BMS Merging Solution )
@@ -58,6 +58,8 @@ packages:
     files:
       # board
       - path: packages/board/board_RP2040_RPi_Pico.yaml
+        vars:
+      # network_status_led_id: 'nullptr' # led used to show status. Default = esp_light, set specific led or set to 'nullptr' to disable
       # uart
       - path: packages/board/board_options_itf_uart_1.yaml
       - path: packages/board/board_options_itf_uart_2.yaml
@@ -77,27 +79,32 @@ packages:
           shunt_id: '1'
           shunt_name: 'Shunt 1'
           shunt_uart_id: 'uart_2'
+          status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
       # shunt2
       - path: packages/shunt/shunt_modbus_Victron_SmartShunt_UART_minimal.yaml
         vars:
           shunt_id: '2'
           shunt_name: 'Shunt 2'
           shunt_uart_id: 'uart_3'
+          status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
       # shunt3
       - path: packages/shunt/shunt_modbus_Victron_SmartShunt_UART_minimal.yaml
         vars:
           shunt_id: '3'
           shunt_name: 'Shunt 3'
           shunt_uart_id: 'uart_4'
+          status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
       # shunt4
       - path: packages/shunt/shunt_modbus_Victron_SmartShunt_UART_minimal.yaml
         vars:
           shunt_id: '4'
           shunt_name: 'Shunt 4'
           shunt_uart_id: 'uart_5'
+          status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
       # shunt5
       - path: packages/shunt/shunt_modbus_Victron_SmartShunt_UART_minimal.yaml
         vars:
           shunt_id: '5'
           shunt_name: 'Shunt 5'
           shunt_uart_id: 'uart_6'
+          status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable

@@ -1,5 +1,5 @@
 # Updated : 2026.02.01
-# Version : 1.2.9
+# Version : 1.0.0
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
 # YamBMS ( Yet another multi-BMS Merging Solution )
@@ -17,10 +17,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
 
-packages:
-  balancer: !include bms_base_balancer.yaml
-  battery_soc: !include bms_base_battery_soc.yaml
-  charging_cycles: !include bms_base_charging_cycles.yaml
-  daily_energy: !include bms_base_daily_energy.yaml
-  sub_device: !include bms_base_sub_device.yaml
-  fault_updater: !include bms_base_fault_updater.yaml
+substitutions:
+  # Use the standard dictionary names defined in device_base_fault_registry.yaml
+  diagnostic_class: "CAT_BMS"
+  # The ID of the LED on your board used for this component
+  status_led_id: "nullptr"
+  # ID for this component instance for fault registry
+  fault_device_id: "${bms_id}"
+
+esphome:
+  on_boot:
+    - priority: 600.0
+      then:
+        - lambda: |-
+            // Register the diagnostic LED for this component
+            register_diagnostic_led(${diagnostic_class}, ${fault_device_id}, (light::LightState*) id(${status_led_id}));

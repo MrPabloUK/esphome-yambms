@@ -1,5 +1,5 @@
-# Updated : 2025.12.23
-# Version : 1.1.2
+# Updated : 2026.02.01
+# Version : 1.1.3
 # GitHub  : https://github.com/syssi/esphome-jk-bms
 
 # YamBMS ( Yet another multi-BMS Merging Solution )
@@ -69,6 +69,9 @@ binary_sensor:
       on_state:
         then:
           - lambda: id(bms${bms_id}_var_ext_balancer_online) = x;
+          - lambda: |-
+            // Pass the current state to the update function
+            update_fault_status(${diagnostic_class}, ${fault_device_id}, !x);
     balancing:
       id: balancer${bms_id}_equalizing
       device_id: balancer_${bms_id}
