@@ -18,6 +18,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
 
 packages:
+  bms_base: !include bms_base.yaml
   balancer: !include bms_base_balancer.yaml
   bms_battery_soc: !include bms_base_battery_soc.yaml
   sub_device: !include bms_base_sub_device.yaml
