@@ -53,8 +53,13 @@ interval:
   - interval: 5s
     then:
       - lambda: |-
-          // network::is_connected() can be used for wifi or ethernet.
-          // It returns true if Ethernet or WiFi has a valid Link + IP.
-          bool x = network::is_connected();
+            // Register the diagnostic LED for this component
+            std::string led_target = "${network_status_led_id}";
+            light::LightState* final_led = nullptr;
 
-          update_fault_status(${diagnostic_class}, ${fault_device_id}, !x);
+            if (led_target != "nullptr") {
+              // Only call id() if the user provided a real component name
+              final_led = (light::LightState*) id(${status_led_id});
+            }
+
+            register_diagnostic_led(${diagnostic_class}, ${fault_device_id}, final_led);

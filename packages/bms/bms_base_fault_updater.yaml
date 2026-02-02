@@ -31,4 +31,12 @@ esphome:
       then:
         - lambda: |-
             // Register the diagnostic LED for this component
-            register_diagnostic_led(${diagnostic_class}, ${fault_device_id}, (light::LightState*) id(${status_led_id}));
+            std::string led_target = "${status_led_id}";
+            light::LightState* final_led = nullptr;
+
+            if (led_target != "nullptr") {
+              // Only call id() if the user provided a real component name
+              final_led = (light::LightState*) id(${status_led_id});
+            }
+
+            register_diagnostic_led(${diagnostic_class}, ${fault_device_id}, final_led);
