@@ -20,8 +20,6 @@
 substitutions:
   # Extended ID
   ext_canbus_id: "rs485${rs485_id}"
-  # Use the standard dictionary names defined in device_base_fault_registry.yaml
-  diagnostic_class: "${CAT_INV_RS485}"
   # The ID of the LED on your board used for this component
   status_led_id: "virtual_status_light"
   # ID for this component instance for fault registry
@@ -42,7 +40,7 @@ esphome:
             }
 
             // Register LED
-            id(global_register_led)(${diagnostic_class}, ${fault_device_id}, final_led);
+            id(global_register_led)(${CAT_INV_RS485}, ${fault_device_id}, final_led);
 
   devices:
     - id: rs485_${rs485_id}
@@ -192,7 +190,7 @@ binary_sensor:
       then:
         - lambda: |-
             // Pass the current state to the update function
-            id(global_update_fault)(${diagnostic_class}, ${fault_device_id}, !x);
+            id(global_update_fault)(${CAT_INV_RS485}, ${fault_device_id}, !x);
 
 interval:
   - interval: 24h

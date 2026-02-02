@@ -18,8 +18,6 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
 
 substitutions:
-  # Use the standard dictionary names defined in device_base_fault_registry.yaml
-  diagnostic_class: "${CAT_SHUNT}"
   # The ID of the LED on your board used for this component
   status_led_id: "virtual_status_light"
   # ID for this component instance for fault registry
@@ -40,4 +38,4 @@ esphome:
             }
 
             // Register LED
-            id(global_register_led)(${diagnostic_class}, ${fault_device_id}, final_led);
+            id(global_register_led)(${diagnostic_class}, ${CAT_SHUNT}, final_led);

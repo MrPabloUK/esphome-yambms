@@ -49,10 +49,10 @@ binary_sensor:
       device_id: bms_${bms_id}
       name: "online status"
       on_state:
-      then:
-        - lambda: |-
-            // Pass the current state to the update function
-            id(global_update_fault)(${diagnostic_class}, ${fault_device_id}, !x);
+        then:
+          - lambda: |-
+              // Pass the current state to the update function
+              id(global_update_fault)(${CAT_BMS}, ${fault_device_id}, !x);
     heating:
       device_id: bms_${bms_id}
       name: "heating"

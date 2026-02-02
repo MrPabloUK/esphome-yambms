@@ -68,8 +68,8 @@ wifi:
   domain: !secret domain
   reboot_timeout: 0s
 
-#logger:
-#  baud_rate: 0 # frees the 3rd UART and avoids some bugs like "WK2168 with canbus" or "BLE client with RS485 modbus"
+logger:
+  baud_rate: 0 # frees the 3rd UART and avoids some bugs like "WK2168 with canbus" or "BLE client with RS485 modbus"
 
 light:
   # https://esphome.io/components/light/esp32_rmt_led_strip
