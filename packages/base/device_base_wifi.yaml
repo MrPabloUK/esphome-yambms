@@ -32,10 +32,10 @@ esphome:
         - lambda: |-
             // Get the pointer to defined LED
             // If nothing is entered, this points to virtual_status_light
-            light::LightState* final_led = &id(${network_status_led_id});
+            light::LightState* final_led = id(${network_status_led_id});
 
             // Check if LED is placeholder
-            if (final_led == &id(virtual_status_light)) {
+            if (final_led == id(virtual_status_light)) {
                 final_led = nullptr; // Swap to real nullptr
             }
 
