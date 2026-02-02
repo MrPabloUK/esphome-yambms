@@ -24,7 +24,7 @@ packages:
 
 substitutions:
   # The ID of the LED on your board used for this component
-  status_led_id: "esp_light"
+  board_status_led_id: "esp_light"
   # ID for this component instance for fault registry
   board_fault_device_id: "1"
 
@@ -34,7 +34,7 @@ esphome:
       then:
         - lambda: |-
             // Register System
-            id(global_register_led)(${CAT_SYSTEM}, ${board_fault_device_id}, id(${status_led_id}));
+            id(global_register_led)(${CAT_SYSTEM}, ${board_fault_device_id}, id(${board_status_led_id}));
 
 time:
   # https://esphome.io/components/time/homeassistant
