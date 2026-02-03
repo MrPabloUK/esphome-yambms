@@ -72,178 +72,143 @@ interval:
     then:
       - lambda: |-
           // -----------------------------------------------------------------------
-          // DATA STRUCTURES FOR PER-LED STATE
+          // CONFIGURATION
           // -----------------------------------------------------------------------
-          
-          // Structure to hold the runtime state of a single physical LED
+          // The duration of one full fault reporting cycle (in ms).
+          // Must be long enough to fit the longest error code + header.
+          // Calculation: 1000ms (Header) + 500ms (Gap) + (Num_Pips * 300ms)
+          // Example: 5000ms allows for roughly 11 pips (Category 10). 
+          const uint32_t FAULT_CYCLE_DURATION = 5000; 
+
+          // -----------------------------------------------------------------------
+          // DATA STRUCTURES
+          // -----------------------------------------------------------------------
           struct LedStateContext {
-              int stage;              // 0=Init, 1=HealthyPulse, 10=Header, 11=Gap, 12=Pips, 13=NextFault
-              uint32_t next_event_ms; // When to switch to next stage
               int pip_counter;        // Tracking blinks
               size_t fault_index;     // Which fault in the list are we showing?
               bool toggle_bit;        // Helper for blinking
+              int last_cycle_id;      // To track if we've handled this global loop
           };
 
-          // Persistent storage for LED states (Key = LightState Pointer)
           static std::map<esphome::light::LightState*, LedStateContext> states;
-          
-          // Temporary map to group assignments by physical LED for this tick
-          // Key: LightState*, Value: List of {Category, Instance} pairs assigned to it
           std::map<esphome::light::LightState*, std::vector<std::pair<int, int>>> assignments;
 
           // -----------------------------------------------------------------------
-          // STEP 1: MAP REGISTRY TO PHYSICAL LEDS
+          // STEP 1: MAP REGISTRY (Same as before)
           // -----------------------------------------------------------------------
-          // We invert the [Cat][Inst] registry to find out what each LED is responsible for.
-          
           for (int cat = 0; cat < 16; cat++) {
              auto &leds_in_cat = id(global_led_registry)[cat];
              for (size_t inst = 0; inst < leds_in_cat.size(); inst++) {
                  auto *led = leds_in_cat[inst];
-                 if (led != nullptr) {
-                     assignments[led].push_back({cat, (int)inst});
-                 }
+                 if (led != nullptr) assignments[led].push_back({cat, (int)inst});
              }
           }
 
           // -----------------------------------------------------------------------
-          // STEP 2: PROCESS EACH LED INDEPENDENTLY
+          // GLOBAL TIMEKEEPING
           // -----------------------------------------------------------------------
-          
           uint32_t now = millis();
+          
+          // 1. Healthy Pulse Sync (2 second period: 1s ON, 1s OFF)
+          bool global_healthy_on = (now % 2000) < 1000;
 
+          // 2. Fault Cycle Sync
+          uint32_t cycle_time = now % FAULT_CYCLE_DURATION;
+          int current_global_cycle_id = now / FAULT_CYCLE_DURATION;
+
+          // -----------------------------------------------------------------------
+          // STEP 2: PROCESS EACH LED
+          // -----------------------------------------------------------------------
           for (auto const& [led, assigned_list] : assignments) {
               
-              // A. Identify Active Faults for this specific LED
+              // A. Identify Active Faults
               std::vector<int> active_fault_categories;
               for (auto &pair : assigned_list) {
                   int cat = pair.first;
                   int inst = pair.second;
                   auto &cat_faults = id(global_instance_faults)[cat];
-                  
-                  // Check if this specific instance is faulted
                   if (inst < cat_faults.size() && cat_faults[inst]) {
                       active_fault_categories.push_back(cat);
                   }
               }
 
-              // B. Retrieve or Initialize State Context
               LedStateContext &ctx = states[led];
-              
-              // C. Timer Check (Non-blocking)
-              // If we haven't reached the next event time, skip logic but KEEP LED ON if needed
-              if ((int32_t)(now - ctx.next_event_ms) < 0) continue;
-
               float bri = 0.5;
+              auto call = led->make_call();
 
-              // -------------------------------------------------------------------
-              // LOGIC BRANCH: DETERMINE MODE (Empty vs Healthy vs Faulted)
-              // -------------------------------------------------------------------
-
-              // CASE 1: UNASSIGNED / EMPTY
-              // (Should technically be caught by assignments map, but safe fallback)
+              // CASE 1: UNASSIGNED
               if (assigned_list.empty()) {
-                  led->make_call().set_state(false).perform();
+                  call.set_state(false).perform();
                   continue;
               }
 
-              // CASE 2: HEALTHY (Assignments exist, but Fault list is empty)
+              // CASE 2: HEALTHY (Global Sync)
               if (active_fault_categories.empty()) {
-                  // Reset Fault State vars
-                  ctx.fault_index = 0; 
+                  // Reset fault trackers so we start fresh if a fault occurs later
+                  ctx.fault_index = 0;
                   
-                  // Simple 1Hz Pulse State Machine
-                  // Stage 1 = ON, Stage 2 = OFF
-                  if (ctx.stage != 1 && ctx.stage != 2) ctx.stage = 1; // Force start
-
-                  auto call = led->make_call();
-                  if (ctx.stage == 1) {
-                      // Pulse ON (Green)
-                      if (${board_has_rgb}) { call.set_rgb(0.0, 1.0, 0.0); }
+                  if (global_healthy_on) {
+                      if (${board_has_rgb}) call.set_rgb(0.0, 1.0, 0.0);
                       call.set_brightness(bri).set_state(true);
-                      ctx.stage = 2;
-                      ctx.next_event_ms = now + 1000; // 1 second ON
                   } else {
-                      // Pulse OFF
                       call.set_state(false);
-                      ctx.stage = 1;
-                      ctx.next_event_ms = now + 1000; // 1 second OFF
                   }
                   call.perform();
                   continue;
               }
 
-              // CASE 3: FAULTED (Active faults exist)
-              // We cycle through active_fault_categories using ctx.fault_index
+              // CASE 3: FAULTED (Global "Bus Stop" Sync)
               
-              // Sanity check index
-              if (ctx.fault_index >= active_fault_categories.size()) ctx.fault_index = 0;
-              
-              int current_cat = active_fault_categories[ctx.fault_index];
-              int pips_needed = current_cat + 1; // Cat 0 = 1 pip, Cat 1 = 2 pips...
-
-              // Initialize Fault Sequence if coming from Healthy
-              if (ctx.stage < 10) ctx.stage = 10;
-
-              auto call = led->make_call();
-
-              switch (ctx.stage) {
-                  
-                  // --- HEADER: BLUE PULSE ---
-                  case 10: 
-                      if (${board_has_rgb}) { call.set_rgb(0.0, 0.0, 1.0); }
-                      call.set_brightness(bri).set_state(true);
-                      call.perform();
-                      
-                      ctx.stage = 11;
-                      ctx.next_event_ms = now + 1000; // Blue for 1s
-                      break;
-
-                  // --- GAP: DARK BEFORE PIPS ---
-                  case 11:
-                      call.set_state(false).perform();
-                      
-                      ctx.pip_counter = 0;
-                      ctx.toggle_bit = true; // Start with ON
-                      ctx.stage = 12;
-                      ctx.next_event_ms = now + 500; // Dark for 500ms
-                      break;
-
-                  // --- PIPS: RED BLINKS ---
-                  case 12:
-                      if (ctx.pip_counter < (pips_needed * 2)) {
-                          if (ctx.toggle_bit) {
-                              // Turn ON (Red)
-                              if (${board_has_rgb}) { call.set_rgb(1.0, 0.0, 0.0); }
-                              call.set_brightness(bri).set_state(true);
-                          } else {
-                              // Turn OFF
-                              call.set_state(false);
-                          }
-                          call.perform();
-
-                          // Timing: If we just turned ON, wait 150ms. If OFF, wait 150ms.
-                          // (Unless we want grouped pips, but let's keep it simple for now)
-                          ctx.next_event_ms = now + 150;
-                          
-                          ctx.toggle_bit = !ctx.toggle_bit;
-                          ctx.pip_counter++;
-                      } else {
-                          // All pips done
-                          ctx.stage = 13;
-                          ctx.next_event_ms = now + 500; // Wait before next fault
-                      }
-                      break;
-
-                  // --- NEXT FAULT: PREPARE LOOP ---
-                  case 13:
-                      call.set_state(false).perform(); // Ensure OFF
-                      
-                      ctx.fault_index++; // Move to next fault in the list
-                      ctx.stage = 10;    // Restart at Blue Header
-                      ctx.next_event_ms = now + 100; // Tiny pause before restarting
-                      break;
+              // Logic: Cycle the fault index only once per global loop
+              if (ctx.last_cycle_id != current_global_cycle_id) {
+                  ctx.last_cycle_id = current_global_cycle_id;
+                  ctx.fault_index++; // Advance to next fault
+                  // Wraparound
+                  if (ctx.fault_index >= active_fault_categories.size()) ctx.fault_index = 0;
               }
+              
+              // Get the specific category we are displaying *this cycle*
+              int current_cat = active_fault_categories[ctx.fault_index];
+              int pips_needed = current_cat + 1;
+
+              // --- TIMELINE BASED ON cycle_time (0 to 5000ms) ---
+              
+              // Phase A: Header (0ms - 1000ms)
+              if (cycle_time < 1000) {
+                  if (${board_has_rgb}) call.set_rgb(0.0, 0.0, 1.0);
+                  call.set_brightness(bri).set_state(true);
+                  call.perform();
+                  continue;
+              }
+
+              // Phase B: Gap (1000ms - 1500ms)
+              if (cycle_time < 1500) {
+                  call.set_state(false).perform();
+                  continue;
+              }
+
+              // Phase C: Red Pips (1500ms onward)
+              uint32_t pip_phase_time = cycle_time - 1500;
+              // Each pip is 300ms total (150ms ON, 150ms OFF)
+              int current_pip_index = pip_phase_time / 300; 
+              uint32_t within_pip = pip_phase_time % 300;
+
+              if (current_pip_index < pips_needed) {
+                  // We are within the count for this specific fault
+                  if (within_pip < 150) {
+                      // ON PART
+                      if (${board_has_rgb}) call.set_rgb(1.0, 0.0, 0.0);
+                      call.set_brightness(bri).set_state(true);
+                  } else {
+                      // OFF PART
+                      call.set_state(false);
+                  }
+              } else {
+                  // We have finished our count, but the global cycle isn't over.
+                  // Wait here (Dark) until cycle_time wraps back to 0.
+                  call.set_state(false);
+              }
+              call.perform();
           }
 
 
