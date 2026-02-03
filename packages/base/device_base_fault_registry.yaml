@@ -70,7 +70,7 @@ globals:
   # -------------------------------------------------------
   # Global Function: Update Fault Status
   # -------------------------------------------------------
-- id: global_update_fault
+  - id: global_update_fault
     type: std::function<void(int, int, bool)>
     initial_value: |-
       [](int category, int instance, bool is_failing) {
