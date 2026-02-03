@@ -72,182 +72,193 @@ interval:
     then:
       - lambda: |-
           // --- STATE VARIABLES ---
-          static int current_stage = 0;       // 0=Search/Heartbeat, 1=BlueHeader, 2=RedPips, 3=Reset
-          static int active_category = -1;    // The fault category currently being displayed (0-15)
-          static int pips_count = 0;          // Counter for the blinks in Stage 2
-          static uint32_t next_event_ms = 0;  // Timestamp for the next non-blocking action
-          static bool heartbeat_on = false;   // Toggle state for the healthy heartbeat
+          static int current_stage = 0;       // 0=Search, 1=BlueHeader, 2=RedPips, 3=Reset
+          static int active_category = -1;    // The category currently being broadcast
+          static int pips_count = 0;          
+          static uint32_t next_event_ms = 0;  
 
-          // --- TIMER CHECK ---
           uint32_t now = millis();
-          if (now < next_event_ms) return;
+          float bri = 0.5;
+          bool hb_on = (now % 2000) < 1000; // 1s ON, 1s OFF
 
-          float bri = 0.5; // Default LED brightness
+          // =================================================================
+          // STEP 1: IDENTIFY UNIQUE LEDS & THEIR STATUS
+          // We must scan the registry to find every unique physical LED and 
+          // determine if it is purely healthy or has any faults.
+          // =================================================================
+          
+          std::vector<esphome::light::LightState*> processed_leds;
+
+          // Iterate through all 16 categories to find LEDs
+          for (int cat_scan = 0; cat_scan < 16; cat_scan++) {
+             auto &registry_row = id(global_led_registry)[cat_scan];
+             
+             for (auto *led : registry_row) {
+                if (led == nullptr) continue;
+
+                // Check if we already processed this LED in this cycle
+                bool already_processed = false;
+                for (auto *p : processed_leds) { if (p == led) { already_processed = true; break; } }
+                if (already_processed) continue;
+
+                // Mark as processed so we don't control it twice
+                processed_leds.push_back(led);
+
+                // --- DIAGNOSE THIS LED ---
+                bool led_has_any_fault = false;
+                bool led_is_active_for_current_fault = false;
+
+                // Re-scan the registry to find ALL assignments for THIS specific LED
+                for (int c = 0; c < 16; c++) {
+                   auto &check_leds = id(global_led_registry)[c];
+                   auto &check_faults = id(global_instance_faults)[c];
+
+                   for (size_t i = 0; i < check_leds.size(); i++) {
+                      if (check_leds[i] == led) {
+                         // Found an assignment for this LED. Is it faulty?
+                         if (i < check_faults.size() && check_faults[i]) {
+                            led_has_any_fault = true;
+                            // Is this the fault currently being broadcast by the State Machine?
+                            if (c == active_category) {
+                               led_is_active_for_current_fault = true;
+                            }
+                         }
+                      }
+                   }
+                }
+
+                // --- APPLY LOGIC BASED ON DIAGNOSIS ---
+                auto call = led->make_call();
+
+                if (!led_has_any_fault) {
+                    // REQUIREMENT 1: No instances unhealthy -> Pulse Green
+                    if (${board_has_rgb}) { call.set_rgb(0.0, 1.0, 0.0); call.set_brightness(bri); }
+                    call.set_state(hb_on);
+                    call.perform();
+                } 
+                else {
+                    // REQUIREMENT 2: Any instance unhealthy -> Fault Mode
+                    // "Do not show green pulses"
+                    
+                    if (led_is_active_for_current_fault && current_stage > 0) {
+                        // This LED owns the current time slot. Show the Pattern.
+                        // (The actual pattern logic is applied below in the State Machine section,
+                        //  but we set the "base" state here to ensure it's on).
+                        // Logic below will handle colors/blinking.
+                    } else {
+                        // REQUIREMENT 3 / WAIT STATE:
+                        // This LED is faulty, but it's not its turn to speak.
+                        // Stay Dark.
+                        call.set_state(false);
+                        call.perform();
+                    }
+                }
+             }
+          }
+
+          // =================================================================
+          // STEP 2: GLOBAL FAULT STATE MACHINE
+          // Cycles through faulty categories one by one.
+          // =================================================================
+          
+          if (now < next_event_ms) return; 
 
           switch (current_stage) {
             
-            // =================================================================
-            // STAGE 0: SEARCH & HEARTBEAT
-            // Logic: Scan for faults. If found, start sequence. If clean, pulse heartbeat.
-            // =================================================================
+            // SEARCH: Find the next faulty category
             case 0: 
-              // Scan: Check all 16 categories for active fault flags
               for (int i = 1; i <= 16; i++) {
-                // Start searching from the category after the last one displayed to ensure rotation
                 int search_target = (active_category + i) % 16;
                 bool is_faulted = (id(global_system_fault_mask) >> search_target) & 1;
                 
-                // Validation: Ensure the faulted category actually has an LED assigned
-                bool has_valid_led = false;
+                // Do valid LEDs exist for this fault?
+                bool has_led = false;
                 if (is_faulted) {
                     for (auto *ptr : id(global_led_registry)[search_target]) {
-                        if (ptr != nullptr) {
-                            has_valid_led = true;
-                            break;
-                        }
+                        if (ptr) { has_led = true; break; }
                     }
                 }
 
-                // Target Found: Transition to Stage 1 (Blue Header)
-                if (is_faulted && has_valid_led) {
+                if (is_faulted && has_led) {
                     active_category = search_target;
                     current_stage = 1; 
-                    return; // Exit immediately to start the sequence next cycle
+                    return; 
                 }
               }
-
-              // No Faults Found: Execute Healthy Heartbeat (Category 0)
-              if (!id(global_led_registry)[0].empty() && id(global_led_registry)[0][0] != nullptr) {
-                auto call = id(global_led_registry)[0][0]->make_call();
-                if (!heartbeat_on) {
-                  // Pulse On (Green)
-                  if (${board_has_rgb}) { 
-                    call.set_rgb(0.0, 1.0, 0.0); 
-                    call.set_brightness(bri); 
-                  }
-                  call.set_state(true); 
-                } else { 
-                  // Pulse Off
-                  call.set_state(false); 
-                }
-                call.perform();
-                
-                // Toggle state and wait 1 second
-                heartbeat_on = !heartbeat_on;
-                next_event_ms = now + 1000;
-              } 
-              
-              // Reset active category to ensure circular scanning works correctly next time
-              active_category = -1;
+              active_category = -1; // No faults in system
               return;
 
-            // =================================================================
-            // STAGE 1: FAULT HEADER (Blue Identifier)
-            // Logic: Turn LED Blue for 1 second to signal "Fault Report Starting"
-            // =================================================================
+            // STAGE 1: BLUE HEADER (Pulse Blue)
             case 1: 
-              for (size_t i = 0; i < id(global_led_registry)[active_category].size(); i++) {
-                auto *led = id(global_led_registry)[active_category][i];
+              // Turn ON the specific LEDs for this active category
+              for (auto *led : id(global_led_registry)[active_category]) {
+                if (!led) continue;
+                // Only turn on if this specific instance is actually faulty? 
+                // Requirement says "Loop through all faults". 
+                // Usually Header is broad, but let's be precise.
                 auto &faults = id(global_instance_faults)[active_category];
-                
-                // Only light up the specific LED instance that has the fault
-                if (led != nullptr && i < faults.size() && faults[i]) {
-                  auto call = led->make_call();
-                  if (${board_has_rgb}) { 
-                    call.set_rgb(0.0, 0.0, 1.0); // Blue
-                    call.set_brightness(bri); 
-                  }
-                  call.set_state(true); 
-                  call.perform();
+                // Check if this LED is linked to a faulty instance
+                bool is_relevant = false;
+                auto &leds = id(global_led_registry)[active_category];
+                for(size_t k=0; k<leds.size(); k++) {
+                    if(leds[k] == led && k < faults.size() && faults[k]) is_relevant = true;
+                }
+
+                if (is_relevant) {
+                    auto call = led->make_call();
+                    if (${board_has_rgb}) call.set_rgb(0.0, 0.0, 1.0); // Blue
+                    call.set_state(true); 
+                    call.perform();
                 }
               }
-              
-              // Transition to Stage 2
-              current_stage = 2; 
-              pips_count = 0; 
-              
-              // Hold Blue for 1000ms before moving to the gap logic in Stage 2
-              next_event_ms = now + 1000; 
+              current_stage = 2; pips_count = 0; next_event_ms = now + 1000;
               break;
 
-            // =================================================================
-            // STAGE 2: IDENTITY PIPS (Red Count)
-            // Logic: Blink Red X times corresponding to the Fault Category ID.
-            //        Includes a dark gap after the Blue Header.
-            // =================================================================
+            // STAGE 2: RED PIPS
             case 2: 
               {
                 int total_toggles = (active_category + 1) * 2; 
-                
-                // Initial Gap Logic
-                // If this is the first entry (count 0), turn off the Blue Header and wait.
+
+                // Gap (Dark)
                 if (pips_count == 0) {
                     for (auto *led : id(global_led_registry)[active_category]) {
-                        if (led != nullptr) { led->make_call().set_state(false).perform(); }
+                       if(led) led->make_call().set_state(false).perform();
                     }
-                    pips_count = 1;            // Advance counter to skip this block next time
-                    next_event_ms = now + 500; // 500ms Dark Gap between Blue Header and Red Pips
+                    pips_count = 1; next_event_ms = now + 500;
                     return;
                 }
 
-                // Blink Logic
-                // Odd numbers are "Off" and even are "On"
-                // This logic ensures the first visible pip is Red.
-                bool is_on_cycle = (pips_count % 2 != 0); 
-                
+                // Pips (Red)
+                bool is_on = (pips_count % 2 != 0); 
                 for (size_t i = 0; i < id(global_led_registry)[active_category].size(); i++) {
                    auto *led = id(global_led_registry)[active_category][i];
                    auto &faults = id(global_instance_faults)[active_category];
-
-                   if (led != nullptr && i < faults.size() && faults[i]) {
-                    auto call = led->make_call();
-                    if (is_on_cycle) {
-                      if (${board_has_rgb}) { 
-                        call.set_rgb(1.0, 0.0, 0.0); // Red
-                        call.set_brightness(bri); 
+                   
+                   if (led && i < faults.size() && faults[i]) {
+                      auto call = led->make_call();
+                      if (is_on) {
+                        if (${board_has_rgb}) call.set_rgb(1.0, 0.0, 0.0); 
+                        call.set_state(true);
+                      } else { 
+                        call.set_state(false); 
                       }
-                      call.set_state(true);
-                    } else { 
-                      call.set_state(false); 
-                    }
-                    call.perform();
-                  }
+                      call.perform();
+                   }
                 }
                 
                 pips_count++;
-
-                // Timing Logic
-                // Use total_toggles + 1 because the count started at 1 (the gap)
-                if (pips_count <= total_toggles) {
-                   // Grouping: Add a longer 500ms pause after every 4th pip (8 toggles)
-                   // Otherwise, use standard 150ms blink speed
-                   int delay = (pips_count > 1 && (pips_count - 1) % 8 == 0) ? 500 : 150;
-                   next_event_ms = now + delay;
-                } else {
-                   // Sequence Complete. Wait 500ms for the final 'Off' to be visible.
-                   current_stage = 3; 
-                   next_event_ms = now + 500;
-                }
+                int delay = (pips_count > 1 && (pips_count - 1) % 8 == 0) ? 500 : 150;
+                next_event_ms = (pips_count <= total_toggles) ? now + delay : now + 500;
+                if (pips_count > total_toggles) current_stage = 3;
               }
               break;
 
-            // =================================================================
-            // STAGE 3: CLEANUP & RESET
-            // Logic: Ensure all LEDs are off before restarting the search.
-            // =================================================================
+            // STAGE 3: CLEANUP
             case 3: 
-              if (active_category >= 0 && active_category < 16) {
-                  for (auto *led : id(global_led_registry)[active_category]) {
-                    if (led != nullptr) {
-                      auto call = led->make_call(); 
-                      call.set_state(false); 
-                      call.perform();
-                    }
-                  }
+              for (auto *led : id(global_led_registry)[active_category]) {
+                 if(led) led->make_call().set_state(false).perform();
               }
-              // Reset to Stage 0 to search for the next fault
-              current_stage = 0; 
-              next_event_ms = now; 
+              current_stage = 0; next_event_ms = now; 
               break;
           }
 
