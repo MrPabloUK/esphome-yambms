@@ -74,19 +74,14 @@ interval:
           // -----------------------------------------------------------------------
           // CONFIGURATION
           // -----------------------------------------------------------------------
-          // The duration of one full fault reporting cycle (in ms).
-          // Must be long enough to fit the longest error code + header.
-          // Calculation: 1000ms (Header) + 500ms (Gap) + (Num_Pips * 300ms)
-          // Example: 5000ms allows for roughly 11 pips (Category 10). 
-          const uint32_t FAULT_CYCLE_DURATION = 5000; 
+          // 6000ms Cycle = 1s Header + 5s for Data (Max ~15 pips)
+          const uint32_t FAULT_CYCLE_DURATION = 6000; 
 
           // -----------------------------------------------------------------------
           // DATA STRUCTURES
           // -----------------------------------------------------------------------
           struct LedStateContext {
-              int pip_counter;        // Tracking blinks
               size_t fault_index;     // Which fault in the list are we showing?
-              bool toggle_bit;        // Helper for blinking
               int last_cycle_id;      // To track if we've handled this global loop
           };
 
@@ -94,7 +89,7 @@ interval:
           std::map<esphome::light::LightState*, std::vector<std::pair<int, int>>> assignments;
 
           // -----------------------------------------------------------------------
-          // STEP 1: MAP REGISTRY (Same as before)
+          // STEP 1: MAP REGISTRY
           // -----------------------------------------------------------------------
           for (int cat = 0; cat < 16; cat++) {
              auto &leds_in_cat = id(global_led_registry)[cat];
@@ -108,13 +103,13 @@ interval:
           // GLOBAL TIMEKEEPING
           // -----------------------------------------------------------------------
           uint32_t now = millis();
-          
-          // 1. Healthy Pulse Sync (2 second period: 1s ON, 1s OFF)
-          bool global_healthy_on = (now % 2000) < 1000;
-
-          // 2. Fault Cycle Sync
           uint32_t cycle_time = now % FAULT_CYCLE_DURATION;
           int current_global_cycle_id = now / FAULT_CYCLE_DURATION;
+
+          // The "Spotlight" Logic:
+          // Healthy LEDs are ONLY allowed to be ON during the first 1000ms (Phase A)
+          // This ensures the remaining 5000ms is dark for Red Pips visibility.
+          bool is_header_phase = (cycle_time < 1000);
 
           // -----------------------------------------------------------------------
           // STEP 2: PROCESS EACH LED
@@ -142,12 +137,12 @@ interval:
                   continue;
               }
 
-              // CASE 2: HEALTHY (Global Sync)
+              // CASE 2: HEALTHY
               if (active_fault_categories.empty()) {
-                  // Reset fault trackers so we start fresh if a fault occurs later
                   ctx.fault_index = 0;
                   
-                  if (global_healthy_on) {
+                  // Only ON during the sync header phase
+                  if (is_header_phase) {
                       if (${board_has_rgb}) call.set_rgb(0.0, 1.0, 0.0);
                       call.set_brightness(bri).set_state(true);
                   } else {
@@ -157,25 +152,21 @@ interval:
                   continue;
               }
 
-              // CASE 3: FAULTED (Global "Bus Stop" Sync)
+              // CASE 3: FAULTED
               
               // Logic: Cycle the fault index only once per global loop
               if (ctx.last_cycle_id != current_global_cycle_id) {
                   ctx.last_cycle_id = current_global_cycle_id;
-                  ctx.fault_index++; // Advance to next fault
-                  // Wraparound
+                  ctx.fault_index++;
                   if (ctx.fault_index >= active_fault_categories.size()) ctx.fault_index = 0;
               }
               
-              // Get the specific category we are displaying *this cycle*
               int current_cat = active_fault_categories[ctx.fault_index];
               int pips_needed = current_cat + 1;
 
-              // --- TIMELINE BASED ON cycle_time (0 to 5000ms) ---
-              
-              // Phase A: Header (0ms - 1000ms)
+              // Phase A: Header (0ms - 1000ms) - MATCHES HEALTHY TIMING
               if (cycle_time < 1000) {
-                  if (${board_has_rgb}) call.set_rgb(0.0, 0.0, 1.0);
+                  if (${board_has_rgb}) call.set_rgb(0.0, 0.0, 1.0); // Blue
                   call.set_brightness(bri).set_state(true);
                   call.perform();
                   continue;
@@ -188,24 +179,20 @@ interval:
               }
 
               // Phase C: Red Pips (1500ms onward)
+              // Healthy LEDs are forced DARK here, so these Pips pop out.
               uint32_t pip_phase_time = cycle_time - 1500;
-              // Each pip is 300ms total (150ms ON, 150ms OFF)
               int current_pip_index = pip_phase_time / 300; 
               uint32_t within_pip = pip_phase_time % 300;
 
               if (current_pip_index < pips_needed) {
-                  // We are within the count for this specific fault
                   if (within_pip < 150) {
-                      // ON PART
-                      if (${board_has_rgb}) call.set_rgb(1.0, 0.0, 0.0);
+                      if (${board_has_rgb}) call.set_rgb(1.0, 0.0, 0.0); // Red
                       call.set_brightness(bri).set_state(true);
                   } else {
-                      // OFF PART
                       call.set_state(false);
                   }
               } else {
-                  // We have finished our count, but the global cycle isn't over.
-                  // Wait here (Dark) until cycle_time wraps back to 0.
+                  // Sequence done, wait for next cycle
                   call.set_state(false);
               }
               call.perform();
