@@ -92,7 +92,7 @@ globals:
            // Push the update to health sensor
            id(global_update_health_sensor)();
         } 
-      }
+      };
 
 
 
