@@ -29,7 +29,7 @@ esphome:
       then:
         - lambda: |-
             // Register System
-            id(global_register_led)(${CAT_INV_RS485}, 1, id(${rs485_status_led_id}));
+            id(global_register_led)(${CAT_INV_RS485}, ${rs485_id}, id(${rs485_status_led_id}));
 
   devices:
     - id: rs485_${ext_rs485_id}

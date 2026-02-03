@@ -29,7 +29,7 @@ esphome:
       then:
         - lambda: |-
             // Register System
-            id(global_register_led)(${CAT_INV_CAN_BUS}, 1, id(${canbus_status_led_id}));
+            id(global_register_led)(${CAT_INV_CAN_BUS}, ${canbus_id}, id(${canbus_status_led_id}));
 
             // Initialise canbus status as off
             id(${ext_canbus_id}_status).publish_state(false);
