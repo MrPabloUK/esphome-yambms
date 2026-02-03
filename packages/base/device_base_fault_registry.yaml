@@ -45,30 +45,30 @@ globals:
     initial_value: '0'
     restore_value: false
 
-  # ---------------------------------------------------------
+# ---------------------------------------------------------
   # Global Function: Update Fault Status
   # ---------------------------------------------------------
   - id: global_update_fault
     type: std::function<void(int, int, bool)>
-    # Function to update fault status
     initial_value: |-
       [](int category, int instance, bool is_failing) {
-        // Convert to zero-based index
         int computer_instance = instance - 1;
 
-        // Validate inputs
         if (category < 0 || category >= 16 || computer_instance < 0) return;
 
-        // Update the fault status
-        // Use 'id' to access the other global variable safely
         auto &faults = id(global_instance_faults)[category];
         
-        // Resize if this is a higher instance ID
         if (computer_instance >= faults.size()) {
            faults.resize(computer_instance + 1, false);
         }
 
-        faults[computer_instance] = is_failing;
+        // Only process if the state has changed
+        if (faults[computer_instance] != is_failing) {
+           // Update the registry
+           faults[computer_instance] = is_failing;
+           
+           // Push the update to health sensor
+           id(global_update_health_sensor)();
       }
 
   - id: global_update_health_sensor
@@ -109,15 +109,6 @@ interval:
                 break; 
               }
             }
-          }
-
-          // Update system fault sensor if global_system_fault_mask changed
-          if (summary_mask != id(global_system_fault_mask)) {
-            // Update the mask
-            id(global_system_fault_mask) = summary_mask;
-            
-            // Push the update to health sensor
-            id(global_update_health_sensor)(); 
           }
           
   # System Health Report in logs, enabled via enable_health_logging substitution
