@@ -1,4 +1,4 @@
-# Updated : 2026.02.01
+# Updated : 2026.02.03
 # Version : 1.3.6
 # GitHub  : https://github.com/fahmula/esphome-pylontech-rs485
 
@@ -30,6 +30,14 @@ esphome:
         - lambda: |-
             // Register System
             id(global_register_led)(${CAT_INV_RS485}, ${rs485_id}, id(${rs485_status_led_id}));
+            // Force register fault as default, will be updated once RS485 is working
+            // (true = fault)
+            id(global_update_fault)(${CAT_INV_RS485}, ${rs485_id}, true);          
+    - priority: -100.0
+      then:
+        - lambda: |-
+            // Initialise rs485 status as off
+            id(${ext_rs485_id}_status).publish_state(false);
 
   devices:
     - id: rs485_${ext_rs485_id}

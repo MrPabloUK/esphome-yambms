@@ -1,4 +1,4 @@
-# Updated : 2026.02.01
+# Updated : 2026.02.03
 # Version : 1.1.4
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
@@ -49,7 +49,7 @@ packages:
       bms_id: '1' # must be a number
       bms_name: 'JK-BMS 1'
       bms_address: '0x01' # BMS 1 DIP switch
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      bms_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable
 
   bms2: !include
     file: packages/bms/bms_combine_JK_RS485_Modbus_JK-B_standard.yaml
@@ -57,7 +57,7 @@ packages:
       bms_id: '2' # must be a number
       bms_name: 'JK-BMS 2'
       bms_address: '0x02' # BMS 2 DIP switch
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      bms_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable
 
   bms3: !include
     file: packages/bms/bms_combine_JK_RS485_Modbus_JK-B_standard.yaml
@@ -65,7 +65,7 @@ packages:
       bms_id: '3' # must be a number
       bms_name: 'JK-BMS 3'
       bms_address: '0x03' # BMS 3 DIP switch
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      bms_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable
 
   bms4: !include
     file: packages/bms/bms_combine_JK_RS485_Modbus_JK-B_standard.yaml
@@ -73,7 +73,7 @@ packages:
       bms_id: '4' # must be a number
       bms_name: 'JK-BMS 4'
       bms_address: '0x04' # BMS 4 DIP switch
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      bms_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable
 
   bms5: !include
     file: packages/bms/bms_combine_JK_RS485_Modbus_JK-B_standard.yaml
@@ -81,7 +81,7 @@ packages:
       bms_id: '5' # must be a number
       bms_name: 'JK-BMS 5'
       bms_address: '0x05' # BMS 5 DIP switch
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      bms_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable
 
   bms6: !include
     file: packages/bms/bms_combine_JK_RS485_Modbus_JK-B_standard.yaml
@@ -89,7 +89,7 @@ packages:
       bms_id: '6' # must be a number
       bms_name: 'JK-BMS 6'
       bms_address: '0x06' # BMS 6 DIP switch
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      bms_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable
 
   bms7: !include
     file: packages/bms/bms_combine_JK_RS485_Modbus_JK-B_standard.yaml
@@ -97,7 +97,7 @@ packages:
       bms_id: '7' # must be a number
       bms_name: 'JK-BMS 7'
       bms_address: '0x07' # BMS 7 DIP switch
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      bms_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable
 
   bms8: !include
     file: packages/bms/bms_combine_JK_RS485_Modbus_JK-B_standard.yaml
@@ -105,4 +105,4 @@ packages:
       bms_id: '8' # must be a number
       bms_name: 'JK-BMS 8'
       bms_address: '0x08' # BMS 8 DIP switch
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      bms_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable

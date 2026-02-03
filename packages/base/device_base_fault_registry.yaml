@@ -29,6 +29,8 @@ substitutions:
   CAT_NETWORK:     "6"
   CAT_AUX_1:       "7"
 
+  enable_health_logging: 'false'  # Set to true to see if component health for all component instances, logged every 60 seconds
+
 globals:
 
   # Tracks True/False fault status for every component instance

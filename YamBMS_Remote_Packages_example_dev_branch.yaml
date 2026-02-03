@@ -1,4 +1,4 @@
-# Updated : 2026.02.01
+# Updated : 2026.02.03
 # Version : 1.6.2
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
@@ -140,7 +140,11 @@ substitutions:
   # | BMS Settings                         |
   # +--------------------------------------+
   bms_update_interval: '3s'    # frequency at which BMS data is refreshed, going below '3s' can cause problems
-
+  # +--------------------------------------+
+  # | Health & LED Assignment Logs         |
+  # +--------------------------------------+
+  enable_led_logging: 'false'     # Set to true to see if an led is assigned to a component correctly, logged every 60 seconds
+  enable_health_logging: 'false'  # Set to true to see if component health for all component instances, logged every 60 seconds
 
 # +--------------------------------------+
 # | Packages                             |
@@ -179,8 +183,10 @@ packages:
       # - path: 'packages/board/board_ESP32-S3_WS-Touch-LCD-7.yaml'
       # - path: 'packages/board/board_ESP32-S3_XIAO.yaml'
       # - path: 'packages/board/board_ESP32-S3_YBoard.yaml'
-        vars:
-      # network_status_led_id: 'nullptr' # led used to show status. Default = esp_light, set specific led or set to 'nullptr' to disable
+
+      #   vars:
+      #     server_status_led_id: 'virtual_status_light' # led used to show status. Default = esp_light, set specific led or set to 'virtual_status_light' to disable
+      #     network_status_led_id: 'virtual_status_light' # led used to show status. Default = esp_light, set specific led or set to 'virtual_status_light' to disable
 
       # - path: 'packages/board/board_ESP32-S3_AtomS3.yaml' # 'packages/board/board_ESP32-S3_AtomS3R.yaml'
       #   vars:
@@ -287,7 +293,7 @@ packages:
           canbus_id: '1' # Must be a number
           canbus_name: 'CANBUS 1'
           canbus_node_id: 'canbus_inverter_1' # CAN bus node to which your inverter is connected
-          status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+          canbus_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable
           # The CANBUS link will be considered down if no response from the inverter (ID 0x305) for 5s
           # The Deye inverter sends the ACK (can_id 0x305) only when it receives the can_id 0x356
           canbus_link_timer: '5s'
@@ -310,7 +316,7 @@ packages:
   #         rs485_uart_id: 'uart_esp_3' # UART interface to which your inverter is connected
   #         rs485_uart_baud_rate: '9600'
   #         rs485_update_timeout: '5s'
-  #         status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+  #         rs485_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable
 
 
   # +------------------------------------------------------------------------------+

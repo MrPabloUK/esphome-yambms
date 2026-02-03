@@ -1,4 +1,4 @@
-# Updated : 2026.02.01
+# Updated : 2026.02.03
 # Version : 1.1.4
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
@@ -42,7 +42,7 @@ packages:
       bms_id: '2' # must match BMS ID
       balancer_name: 'NEEY 1'
       balancer_ble_mac_address: 11:22:33:44:55:66
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      balancer_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable
 
   # Balancer for BMS 3
   balancer3: !include
@@ -51,4 +51,4 @@ packages:
       bms_id: '3' # must be a number
       balancer_name: 'NEEY 2'
       balancer_ble_mac_address: 11:22:33:44:55:67
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      balancer_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable

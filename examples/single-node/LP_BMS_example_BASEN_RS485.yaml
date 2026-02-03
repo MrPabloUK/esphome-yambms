@@ -1,4 +1,4 @@
-# Updated : 2026.02.01
+# Updated : 2026.02.03
 # Version : 1.1.2
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
@@ -40,7 +40,7 @@ packages:
       bms_id: '1' # must be a number
       bms_name: 'BASEN-BMS 1'
       bms_address: '0x01'
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      bms_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable
 
   # Basen module 2
   bms2: !include
@@ -49,4 +49,4 @@ packages:
       bms_id: '2' # must be a number
       bms_name: 'BASEN-BMS 2'
       bms_address: '0x02'
-      status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out or set to 'nullptr' to disable
+      bms_status_led_id: 'esp_light' # led used to show status. Default = esp_light, comment out to disable

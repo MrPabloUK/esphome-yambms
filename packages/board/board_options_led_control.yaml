@@ -19,6 +19,7 @@
 
 
 substitutions:
+  enable_led_logging: 'false'
   global_status_led: "esp_light"
 
 globals:
