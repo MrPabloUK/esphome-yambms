@@ -72,66 +72,72 @@ interval:
     then:
       - lambda: |-
           // -----------------------------------------------------------------------
-          // STATE MANAGEMENT
+          // CONFIG
+          // -----------------------------------------------------------------------
+          const uint32_t HEADER_MS = 1000;
+          const uint32_t PRE_PIP_GAP_MS = 500;
+          const uint32_t PIP_DURATION_MS = 300;   // 150ms ON / 150ms OFF
+          const uint32_t GROUP_GAP_MS = 500;      // Pause after every 4 pips
+          const uint32_t END_PADDING_MS = 1000;
+          
+          // -----------------------------------------------------------------------
+          // STATE
           // -----------------------------------------------------------------------
           struct LedStateContext {
               size_t fault_index;
               int last_cycle_id;
           };
-
-          // Static variables persist between lambda calls
           static std::map<esphome::light::LightState*, LedStateContext> states;
           static uint32_t cycle_start_ms = 0;
           static uint32_t current_cycle_duration = 2000;
           static int global_cycle_count = 0;
 
           // -----------------------------------------------------------------------
-          // STEP 1: DYNAMIC TIMING CALCULATION
+          // STEP 1: DYNAMIC TIMING (With Group Gaps)
           // -----------------------------------------------------------------------
           uint32_t now = millis();
           int32_t time_into_cycle = now - cycle_start_ms;
 
-          // Check if the current cycle has expired
           if (time_into_cycle >= current_cycle_duration || time_into_cycle < 0) {
-              
-              // RESET: Start a new cycle
               cycle_start_ms = now;
               time_into_cycle = 0;
               global_cycle_count++;
 
-              // Scan entire system to find the "worst case" fault currently active
+              // Find worst-case fault
               int max_active_category = -1;
-
               for (int cat = 0; cat < 16; cat++) {
                   auto &faults = id(global_instance_faults)[cat];
                   for (bool f : faults) {
                       if (f) {
                           if (cat > max_active_category) max_active_category = cat;
-                          break; // Found a fault in this cat, move to next cat
+                          break; 
                       }
                   }
               }
 
-              // Calculate required duration
               if (max_active_category == -1) {
-                  // System Healthy: Default to 2s (1s ON, 1s OFF)
                   current_cycle_duration = 2000;
               } else {
-                  // System Faulted: Calculate exact time needed
-                  // Duration = Header(1000) + Gap(500) + (Pips * 300) + Padding(500)
                   int pips = max_active_category + 1;
-                  current_cycle_duration = 1500 + (pips * 300) + 500;
                   
-                  // Enforce 2s minimum so the Green/Blue Header (1s) doesn't look like a strobe
+                  // Math: Base time for all pips
+                  uint32_t total_pip_time = pips * PIP_DURATION_MS;
+                  
+                  // Math: Add gaps (1 gap for every FULL group of 4 pips preceding others)
+                  // Example: 4 pips = 0 gaps. 5 pips = 1 gap. 9 pips = 2 gaps.
+                  int gaps = (pips - 1) / 4;
+                  uint32_t total_gap_time = gaps * GROUP_GAP_MS;
+
+                  current_cycle_duration = HEADER_MS + PRE_PIP_GAP_MS + total_pip_time + total_gap_time + END_PADDING_MS;
+                  
                   if (current_cycle_duration < 2000) current_cycle_duration = 2000;
               }
           }
 
           // -----------------------------------------------------------------------
-          // STEP 2: MAP REGISTRY TO PHYSICAL LEDS
+          // STEP 2: REGISTRY MAPPING
           // -----------------------------------------------------------------------
           std::map<esphome::light::LightState*, std::vector<std::pair<int, int>>> assignments;
-          
           for (int cat = 0; cat < 16; cat++) {
              auto &leds_in_cat = id(global_led_registry)[cat];
              for (size_t inst = 0; inst < leds_in_cat.size(); inst++) {
@@ -141,35 +147,30 @@ interval:
           }
 
           // -----------------------------------------------------------------------
-          // STEP 3: UPDATE LEDS
+          // STEP 3: RENDER
           // -----------------------------------------------------------------------
-          // Spotlight Logic: Header is valid only in the first 1000ms
-          bool is_header_phase = (time_into_cycle < 1000);
+          bool is_header_phase = (time_into_cycle < HEADER_MS);
 
           for (auto const& [led, assigned_list] : assignments) {
-              
-              // A. Identify Active Faults for this LED
               std::vector<int> active_fault_categories;
               for (auto &pair : assigned_list) {
                   int cat = pair.first;
                   int inst = pair.second;
                   auto &cat_faults = id(global_instance_faults)[cat];
-                  if (inst < cat_faults.size() && cat_faults[inst]) {
-                      active_fault_categories.push_back(cat);
-                  }
+                  if (inst < cat_faults.size() && cat_faults[inst]) active_fault_categories.push_back(cat);
               }
 
               LedStateContext &ctx = states[led];
               float bri = 0.5;
               auto call = led->make_call();
 
-              // CASE 1: UNASSIGNED
+              // UNASSIGNED
               if (assigned_list.empty()) {
                   call.set_state(false).perform();
                   continue;
               }
 
-              // CASE 2: HEALTHY (Green Sync)
+              // HEALTHY
               if (active_fault_categories.empty()) {
                   ctx.fault_index = 0;
                   if (is_header_phase) {
@@ -182,9 +183,7 @@ interval:
                   continue;
               }
 
-              // CASE 3: FAULTED (Blue Sync)
-              
-              // Update Rotation on Cycle Change
+              // FAULTED
               if (ctx.last_cycle_id != global_cycle_count) {
                   ctx.last_cycle_id = global_cycle_count;
                   ctx.fault_index++;
@@ -194,34 +193,56 @@ interval:
               int current_cat = active_fault_categories[ctx.fault_index];
               int pips_needed = current_cat + 1;
 
-              // Phase A: Header (0 - 1000ms)
-              if (time_into_cycle < 1000) {
+              // Phase A: Header
+              if (time_into_cycle < HEADER_MS) {
                   if (${board_has_rgb}) call.set_rgb(0.0, 0.0, 1.0);
                   call.set_brightness(bri).set_state(true);
                   call.perform();
                   continue;
               }
 
-              // Phase B: Gap (1000 - 1500ms)
-              if (time_into_cycle < 1500) {
+              // Phase B: Gap
+              uint32_t start_pips = HEADER_MS + PRE_PIP_GAP_MS;
+              if (time_into_cycle < start_pips) {
                   call.set_state(false).perform();
                   continue;
               }
 
-              // Phase C: Pips (1500ms -> End)
-              uint32_t pip_phase_time = time_into_cycle - 1500;
-              int current_pip_index = pip_phase_time / 300; 
-              uint32_t within_pip = pip_phase_time % 300;
-
-              if (current_pip_index < pips_needed) {
-                  if (within_pip < 150) {
-                      if (${board_has_rgb}) call.set_rgb(1.0, 0.0, 0.0);
-                      call.set_brightness(bri).set_state(true);
+              // Phase C: Grouped Pips
+              uint32_t t_pips = time_into_cycle - start_pips;
+              
+              // Calculate which "Block" of 4 we are in
+              // Block Duration = (4 * 300) + 500 = 1700ms
+              // Except the last block might be shorter/partial.
+              
+              const uint32_t BLOCK_DURATION = (4 * PIP_DURATION_MS) + GROUP_GAP_MS;
+              
+              int block_idx = t_pips / BLOCK_DURATION;
+              uint32_t t_within_block = t_pips % BLOCK_DURATION;
+              
+              // How many pips have we already rendered in previous blocks?
+              int pips_rendered_previously = block_idx * 4;
+              
+              // Are we in the "Active Pips" part of the block (0-1200ms) or the "Gap" part (1200-1700ms)?
+              if (t_within_block < (4 * PIP_DURATION_MS)) {
+                  // We are in the blinking part
+                  int pip_in_block = t_within_block / PIP_DURATION_MS; // 0, 1, 2, or 3
+                  int actual_pip_number = pips_rendered_previously + pip_in_block + 1; // 1-based index
+                  
+                  if (actual_pip_number <= pips_needed) {
+                      // Determine ON/OFF within the 300ms window
+                      if ((t_within_block % PIP_DURATION_MS) < (PIP_DURATION_MS / 2)) {
+                           if (${board_has_rgb}) call.set_rgb(1.0, 0.0, 0.0);
+                           call.set_brightness(bri).set_state(true);
+                      } else {
+                           call.set_state(false);
+                      }
                   } else {
-                      call.set_state(false);
+                      call.set_state(false); // Done counting
                   }
               } else {
-                  call.set_state(false); // Wait for next cycle
+                  // We are in the 500ms Inter-Group Gap
+                  call.set_state(false);
               }
               call.perform();
           }
