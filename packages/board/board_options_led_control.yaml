@@ -71,171 +71,173 @@ interval:
   - interval: 50ms
     then:
       - lambda: |-
-          static const uint32_t HEADER_DUR = 1000;
-          static const uint32_t GAP_DUR = 500;
-          static const uint32_t PIP_ON_DUR = 200;
-          static const uint32_t PIP_OFF_DUR = 200;
-          static const uint32_t POST_SEQ_DUR = 1000;
+          // -----------------------------------------------------------------------
+          // CONFIGURATION
+          // -----------------------------------------------------------------------
+          const uint32_t DUR_HEADER = 1000; // Blue Header Length
+          const uint32_t DUR_GAP    = 500;  // Dark Gap Length
+          const uint32_t DUR_PIP_ON = 200;  // Red Pip ON Length
+          const uint32_t DUR_PIP_OFF= 200;  // Red Pip OFF Length
+          const uint32_t DUR_NEXT   = 1000; // Pause between different fault codes
 
           uint32_t now = millis();
-          bool hb_on = (now % 2000) < 1000; // Global Heartbeat Rhythm
+          bool global_heartbeat = (now % 2000) < 1000; // 1s ON, 1s OFF
 
-          // -----------------------------------------------------------------
-          // 1. DATA GATHERING
-          // Build a temporary map of what every LED is responsible for right now.
-          // -----------------------------------------------------------------
+          // -----------------------------------------------------------------------
+          // 1. DATA GATHERING (The "Workload")
+          // We scan the registry to build a strict job description for every unique LED.
+          // -----------------------------------------------------------------------
           
-          struct LedWorkload {
-              std::vector<int> faulty_categories; // List of error codes to flash
-              bool has_healthy = false;           // Should it pulse green if no faults?
+          struct LedJob {
+              std::vector<int> faults; // List of categories (e.g. [1, 4])
+              bool has_healthy = false;
           };
-          std::map<esphome::light::LightState*, LedWorkload> workload_map;
+          std::map<esphome::light::LightState*, LedJob> jobs;
 
-          // Scan the entire registry
           for (int cat = 0; cat < 16; cat++) {
              auto &leds = id(global_led_registry)[cat];
-             auto &faults = id(global_instance_faults)[cat];
+             auto &fault_flags = id(global_instance_faults)[cat];
 
              for (size_t i = 0; i < leds.size(); i++) {
                 auto *led = leds[i];
                 if (!led) continue;
 
-                // Create entry if not exists
-                if (workload_map.find(led) == workload_map.end()) {
-                    workload_map[led] = LedWorkload();
-                }
+                // Create or Access Job Entry
+                LedJob &job = jobs[led];
 
-                // Check Status
-                bool is_failing = (i < faults.size() && faults[i]);
-                
-                if (is_failing) {
-                    // Avoid duplicate categories for the same LED (e.g. 2 broken batteries on same LED)
-                    bool already_listed = false;
-                    for(int c : workload_map[led].faulty_categories) { if(c == cat) already_listed = true; }
-                    
-                    if (!already_listed) {
-                        workload_map[led].faulty_categories.push_back(cat);
-                    }
+                // Check specific instance health
+                if (i < fault_flags.size() && fault_flags[i]) {
+                    // It is Faulty. Add category to playlist if not already there.
+                    bool exists = false;
+                    for(int c : job.faults) { if(c == cat) exists = true; }
+                    if (!exists) job.faults.push_back(cat);
                 } else {
-                    workload_map[led].has_healthy = true;
+                    // It is Healthy.
+                    job.has_healthy = true;
                 }
              }
           }
 
-          // -----------------------------------------------------------------
-          // 2. STATE TRACKING
-          // Persist the current animation state for each LED between cycles
-          // -----------------------------------------------------------------
-          
-          struct LedState {
-              int playlist_index = 0;   // Which fault in the vector are we showing?
-              int stage = 0;            // 0=Init, 1=Header, 2=Gap, 3=PipOn, 4=PipOff, 5=Wait
-              int pips_remaining = 0;   // How many blinks left for current code?
-              uint32_t next_event = 0;  // When to switch stage
+          // -----------------------------------------------------------------------
+          // 2. STATE MEMORY
+          // Remembers where each LED is in its specific animation sequence.
+          // -----------------------------------------------------------------------
+          struct AnimState {
+              int idx = 0;       // Which fault index are we playing?
+              int stage = 0;     // 0=Start, 1=Blue, 2=Gap, 3=PipOn, 4=PipOff, 5=Wait
+              int pips_left = 0; // Counter for blinks
+              uint32_t timer = 0;// Next event time
           };
-          static std::map<esphome::light::LightState*, LedState> states;
+          static std::map<esphome::light::LightState*, AnimState> memory;
 
-          // -----------------------------------------------------------------
+          // -----------------------------------------------------------------------
           // 3. EXECUTION LOOP
-          // Process each physical LED exactly once based on its workload
-          // -----------------------------------------------------------------
-
-          for (auto const& [led, load] : workload_map) {
+          // Process each LED exactly once based on its Job Description.
+          // -----------------------------------------------------------------------
+          
+          for (auto &pair : jobs) {
+              auto *led = pair.first;
+              auto &job = pair.second;
+              auto &mem = memory[led]; // Get persistent state
               auto call = led->make_call();
-              LedState &st = states[led]; // Get or create state context
 
-              // --- CASE A: NO FAULTS (HEARTBEAT) ---
-              if (load.faulty_categories.empty()) {
-                  // Reset state for next time a fault happens
-                  st.playlist_index = 0;
-                  st.stage = 0;
+              // ===================================================================
+              // MODE 1: FAULT OVERRIDE
+              // If ANY faults exist, this LED enters Fault Mode. Green is forbidden.
+              // ===================================================================
+              if (!job.faults.empty()) {
                   
-                  if (load.has_healthy) {
-                      if (${board_has_rgb}) { call.set_rgb(0.0, 1.0, 0.0); call.set_brightness(0.5); }
-                      call.set_state(hb_on);
-                  } else {
-                      call.set_state(false); // Assigned but no healthy devices? Dark.
+                  // Reset if index is invalid (e.g., fault cleared while playing)
+                  if (mem.idx >= job.faults.size()) {
+                      mem.idx = 0;
+                      mem.stage = 0;
+                      mem.timer = now;
                   }
-                  call.perform();
+
+                  // Wait for Timer
+                  if (now < mem.timer) continue; 
+
+                  // Animation State Machine
+                  int category = job.faults[mem.idx];
+                  
+                  switch (mem.stage) {
+                      case 0: // Setup
+                          mem.stage = 1;
+                          mem.pips_left = category + 1; // Cat 0 = 1 pip
+                          mem.timer = now; // Immediate
+                          break;
+
+                      case 1: // Blue Header
+                          if (${board_has_rgb}) { call.set_rgb(0.0, 0.0, 1.0); }
+                          call.set_state(true);
+                          call.perform();
+                          mem.stage = 2;
+                          mem.timer = now + DUR_HEADER;
+                          break;
+
+                      case 2: // Gap (Dark)
+                          call.set_state(false);
+                          call.perform();
+                          mem.stage = 3;
+                          mem.timer = now + DUR_GAP;
+                          break;
+
+                      case 3: // Red Pip ON
+                          if (${board_has_rgb}) { call.set_rgb(1.0, 0.0, 0.0); }
+                          call.set_state(true);
+                          call.perform();
+                          mem.stage = 4;
+                          mem.timer = now + DUR_PIP_ON;
+                          break;
+
+                      case 4: // Red Pip OFF
+                          call.set_state(false);
+                          call.perform();
+                          mem.pips_left--;
+                          if (mem.pips_left > 0) {
+                              mem.stage = 3; // More pips? Go back to ON
+                              mem.timer = now + DUR_PIP_OFF;
+                          } else {
+                              mem.stage = 5; // Done? Go to Wait
+                              mem.timer = now + DUR_PIP_OFF;
+                          }
+                          break;
+
+                      case 5: // Next Fault Delay (Dark)
+                          call.set_state(false);
+                          call.perform();
+                          mem.idx++; // Next fault in list
+                          if (mem.idx >= job.faults.size()) mem.idx = 0; // Loop
+                          mem.stage = 0; // Restart
+                          mem.timer = now + DUR_NEXT;
+                          break;
+                  }
+                  
+                  // CRITICAL: Force loop continue to prevent Green logic from running
                   continue; 
               }
 
-              // --- CASE B: ACTIVE FAULTS (ANIMATION SEQUENCE) ---
-              
-              // 0. Safety: Check if playlist index is out of bounds (fault cleared mid-cycle)
-              if (st.playlist_index >= load.faulty_categories.size()) {
-                  st.playlist_index = 0;
-                  st.stage = 0; // Restart sequence
-                  st.next_event = now;
+              // ===================================================================
+              // MODE 2: HEALTHY HEARTBEAT
+              // Only runs if Job Faults is empty AND has_healthy is true
+              // ===================================================================
+              if (job.has_healthy) {
+                  // Reset memory so if a fault occurs later, it starts fresh
+                  mem.idx = 0; 
+                  mem.stage = 0;
+
+                  if (${board_has_rgb}) { call.set_rgb(0.0, 1.0, 0.0); }
+                  call.set_state(global_heartbeat);
+                  call.perform();
+                  continue;
               }
 
-              // If waiting for timer, do nothing (keep current light state)
-              if (now < st.next_event) continue;
-
-              // State Machine
-              int current_cat = load.faulty_categories[st.playlist_index];
-
-              switch (st.stage) {
-                  case 0: // INIT NEW CODE
-                      st.stage = 1;
-                      st.pips_remaining = current_cat + 1; // Cat 0 = 1 pip
-                      st.next_event = now; // Immediate transition
-                      break;
-
-                  case 1: // BLUE HEADER
-                      if (${board_has_rgb}) { call.set_rgb(0.0, 0.0, 1.0); call.set_brightness(0.5); }
-                      call.set_state(true);
-                      call.perform();
-                      
-                      st.stage = 2;
-                      st.next_event = now + HEADER_DUR;
-                      break;
-
-                  case 2: // PRE-PIP GAP (DARK)
-                      call.set_state(false);
-                      call.perform();
-                      
-                      st.stage = 3;
-                      st.next_event = now + GAP_DUR;
-                      break;
-
-                  case 3: // PIP ON (RED)
-                      if (${board_has_rgb}) { call.set_rgb(1.0, 0.0, 0.0); call.set_brightness(0.5); }
-                      call.set_state(true);
-                      call.perform();
-
-                      st.stage = 4;
-                      st.next_event = now + PIP_ON_DUR;
-                      break;
-
-                  case 4: // PIP OFF (DARK)
-                      call.set_state(false);
-                      call.perform();
-                      
-                      st.pips_remaining--;
-                      if (st.pips_remaining > 0) {
-                          st.stage = 3; // Back to Pip ON
-                          st.next_event = now + PIP_OFF_DUR;
-                      } else {
-                          st.stage = 5; // Sequence Done
-                          st.next_event = now + PIP_OFF_DUR;
-                      }
-                      break;
-
-                  case 5: // INTER-SEQUENCE DELAY (DARK)
-                      call.set_state(false);
-                      call.perform();
-
-                      // Advance to next fault in the playlist
-                      st.playlist_index++;
-                      if (st.playlist_index >= load.faulty_categories.size()) {
-                          st.playlist_index = 0; // Loop back to start
-                      }
-                      
-                      st.stage = 0; // Ready for next code
-                      st.next_event = now + POST_SEQ_DUR;
-                      break;
-              }
+              // ===================================================================
+              // MODE 3: OFF / DARK
+              // Assigned but disconnected/null status
+              // ===================================================================
+              call.set_state(false);
+              call.perform();
           }
 
 
