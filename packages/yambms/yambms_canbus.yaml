@@ -31,6 +31,8 @@ esphome:
             // Register System
             id(global_register_led)(${CAT_INV_CAN_BUS}, ${canbus_id}, id(${canbus_status_led_id}));
     - priority: -100.0
+      then:
+        - lambda: |-
             // Initialise canbus status as off
             id(${ext_canbus_id}_status).publish_state(false);
             
