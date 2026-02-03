@@ -114,26 +114,7 @@ globals:
         } 
       }
 
-
-
-interval:
-  # Summarize faults (Every 250ms)
-  # Scans the detailed global_instance_faults data to build the global_system_fault_mask
-  - interval: 250ms
-    then:
-      - lambda: |-
-          uint16_t summary_mask = 0;
-          
-          // Calculate global_system_fault_mask
-          for (int category = 0; category < 16; category++) {
-            for (bool faulted : id(global_instance_faults)[category]) {
-              if (faulted) {
-                summary_mask |= (1 << category);
-                break; 
-              }
-            }
-          }
-          
+interval:        
   # System Health Report in logs, enabled via enable_health_logging substitution
   - interval: 60s
     then:
