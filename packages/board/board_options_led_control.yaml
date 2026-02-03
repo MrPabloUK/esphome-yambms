@@ -225,9 +225,9 @@ interval:
                    int delay = (pips_count > 1 && (pips_count - 1) % 8 == 0) ? 500 : 150;
                    next_event_ms = now + delay;
                 } else {
-                   // Sequence Complete. Wait 150ms for the final 'Off' to be visible.
+                   // Sequence Complete. Wait 500ms for the final 'Off' to be visible.
                    current_stage = 3; 
-                   next_event_ms = now + 150;
+                   next_event_ms = now + 500;
                 }
               }
               break;
