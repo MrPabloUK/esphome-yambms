@@ -1,4 +1,4 @@
-# Updated : 2026.02.01
+# Updated : 2026.02.03
 # Version : 1.1.6
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
@@ -19,7 +19,7 @@
 
 packages:
   shunt_base_minimal: !include shunt_base_minimal.yaml
-  shunt_base_fault_updater: !include shunt_base_fault_updater.yaml
+  led_assign: !include shunt_base_led_assign.yaml
 
 sensor:
   # Daily Charging Energy
