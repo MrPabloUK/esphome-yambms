@@ -72,25 +72,66 @@ interval:
     then:
       - lambda: |-
           // -----------------------------------------------------------------------
-          // CONFIGURATION
-          // -----------------------------------------------------------------------
-          // 6000ms Cycle = 1s Header + 5s for Data (Max ~15 pips)
-          const uint32_t FAULT_CYCLE_DURATION = 6000; 
-
-          // -----------------------------------------------------------------------
-          // DATA STRUCTURES
+          // STATE MANAGEMENT
           // -----------------------------------------------------------------------
           struct LedStateContext {
-              size_t fault_index;     // Which fault in the list are we showing?
-              int last_cycle_id;      // To track if we've handled this global loop
+              size_t fault_index;
+              int last_cycle_id;
           };
 
+          // Static variables persist between lambda calls
           static std::map<esphome::light::LightState*, LedStateContext> states;
-          std::map<esphome::light::LightState*, std::vector<std::pair<int, int>>> assignments;
+          static uint32_t cycle_start_ms = 0;
+          static uint32_t current_cycle_duration = 2000;
+          static int global_cycle_count = 0;
 
           // -----------------------------------------------------------------------
-          // STEP 1: MAP REGISTRY
+          // STEP 1: DYNAMIC TIMING CALCULATION
           // -----------------------------------------------------------------------
+          uint32_t now = millis();
+          int32_t time_into_cycle = now - cycle_start_ms;
+
+          // Check if the current cycle has expired
+          if (time_into_cycle >= current_cycle_duration || time_into_cycle < 0) {
+              
+              // RESET: Start a new cycle
+              cycle_start_ms = now;
+              time_into_cycle = 0;
+              global_cycle_count++;
+
+              // Scan entire system to find the "worst case" fault currently active
+              int max_active_category = -1;
+
+              for (int cat = 0; cat < 16; cat++) {
+                  auto &faults = id(global_instance_faults)[cat];
+                  for (bool f : faults) {
+                      if (f) {
+                          if (cat > max_active_category) max_active_category = cat;
+                          break; // Found a fault in this cat, move to next cat
+                      }
+                  }
+              }
+
+              // Calculate required duration
+              if (max_active_category == -1) {
+                  // System Healthy: Default to 2s (1s ON, 1s OFF)
+                  current_cycle_duration = 2000;
+              } else {
+                  // System Faulted: Calculate exact time needed
+                  // Duration = Header(1000) + Gap(500) + (Pips * 300) + Padding(500)
+                  int pips = max_active_category + 1;
+                  current_cycle_duration = 1500 + (pips * 300) + 500;
+                  
+                  // Enforce 2s minimum so the Green/Blue Header (1s) doesn't look like a strobe
+                  if (current_cycle_duration < 2000) current_cycle_duration = 2000;
+              }
+          }
+
+          // -----------------------------------------------------------------------
+          // STEP 2: MAP REGISTRY TO PHYSICAL LEDS
+          // -----------------------------------------------------------------------
+          std::map<esphome::light::LightState*, std::vector<std::pair<int, int>>> assignments;
+          
           for (int cat = 0; cat < 16; cat++) {
              auto &leds_in_cat = id(global_led_registry)[cat];
              for (size_t inst = 0; inst < leds_in_cat.size(); inst++) {
@@ -100,23 +141,14 @@ interval:
           }
 
           // -----------------------------------------------------------------------
-          // GLOBAL TIMEKEEPING
+          // STEP 3: UPDATE LEDS
           // -----------------------------------------------------------------------
-          uint32_t now = millis();
-          uint32_t cycle_time = now % FAULT_CYCLE_DURATION;
-          int current_global_cycle_id = now / FAULT_CYCLE_DURATION;
+          // Spotlight Logic: Header is valid only in the first 1000ms
+          bool is_header_phase = (time_into_cycle < 1000);
 
-          // The "Spotlight" Logic:
-          // Healthy LEDs are ONLY allowed to be ON during the first 1000ms (Phase A)
-          // This ensures the remaining 5000ms is dark for Red Pips visibility.
-          bool is_header_phase = (cycle_time < 1000);
-
-          // -----------------------------------------------------------------------
-          // STEP 2: PROCESS EACH LED
-          // -----------------------------------------------------------------------
           for (auto const& [led, assigned_list] : assignments) {
               
-              // A. Identify Active Faults
+              // A. Identify Active Faults for this LED
               std::vector<int> active_fault_categories;
               for (auto &pair : assigned_list) {
                   int cat = pair.first;
@@ -137,11 +169,9 @@ interval:
                   continue;
               }
 
-              // CASE 2: HEALTHY
+              // CASE 2: HEALTHY (Green Sync)
               if (active_fault_categories.empty()) {
                   ctx.fault_index = 0;
-                  
-                  // Only ON during the sync header phase
                   if (is_header_phase) {
                       if (${board_has_rgb}) call.set_rgb(0.0, 1.0, 0.0);
                       call.set_brightness(bri).set_state(true);
@@ -152,48 +182,46 @@ interval:
                   continue;
               }
 
-              // CASE 3: FAULTED
+              // CASE 3: FAULTED (Blue Sync)
               
-              // Logic: Cycle the fault index only once per global loop
-              if (ctx.last_cycle_id != current_global_cycle_id) {
-                  ctx.last_cycle_id = current_global_cycle_id;
+              // Update Rotation on Cycle Change
+              if (ctx.last_cycle_id != global_cycle_count) {
+                  ctx.last_cycle_id = global_cycle_count;
                   ctx.fault_index++;
                   if (ctx.fault_index >= active_fault_categories.size()) ctx.fault_index = 0;
               }
-              
+
               int current_cat = active_fault_categories[ctx.fault_index];
               int pips_needed = current_cat + 1;
 
-              // Phase A: Header (0ms - 1000ms) - MATCHES HEALTHY TIMING
-              if (cycle_time < 1000) {
-                  if (${board_has_rgb}) call.set_rgb(0.0, 0.0, 1.0); // Blue
+              // Phase A: Header (0 - 1000ms)
+              if (time_into_cycle < 1000) {
+                  if (${board_has_rgb}) call.set_rgb(0.0, 0.0, 1.0);
                   call.set_brightness(bri).set_state(true);
                   call.perform();
                   continue;
               }
 
-              // Phase B: Gap (1000ms - 1500ms)
-              if (cycle_time < 1500) {
+              // Phase B: Gap (1000 - 1500ms)
+              if (time_into_cycle < 1500) {
                   call.set_state(false).perform();
                   continue;
               }
 
-              // Phase C: Red Pips (1500ms onward)
-              // Healthy LEDs are forced DARK here, so these Pips pop out.
-              uint32_t pip_phase_time = cycle_time - 1500;
+              // Phase C: Pips (1500ms -> End)
+              uint32_t pip_phase_time = time_into_cycle - 1500;
               int current_pip_index = pip_phase_time / 300; 
               uint32_t within_pip = pip_phase_time % 300;
 
               if (current_pip_index < pips_needed) {
                   if (within_pip < 150) {
-                      if (${board_has_rgb}) call.set_rgb(1.0, 0.0, 0.0); // Red
+                      if (${board_has_rgb}) call.set_rgb(1.0, 0.0, 0.0);
                       call.set_brightness(bri).set_state(true);
                   } else {
                       call.set_state(false);
                   }
               } else {
-                  // Sequence done, wait for next cycle
-                  call.set_state(false);
+                  call.set_state(false); // Wait for next cycle
               }
               call.perform();
           }
