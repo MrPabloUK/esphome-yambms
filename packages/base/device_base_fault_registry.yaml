@@ -67,30 +67,50 @@ globals:
         id(sys_fault_data).publish_state(json);
       }
 
-  # -------------------------------------------------------
+# ---------------------------------------------------------
   # Global Function: Update Fault Status
-  # -------------------------------------------------------
+  # ---------------------------------------------------------
   - id: global_update_fault
     type: std::function<void(int, int, bool)>
     initial_value: |-
       [](int category, int instance, bool is_failing) {
         int computer_instance = instance - 1;
 
+        // Checks
         if (category < 0 || category >= 16 || computer_instance < 0) return;
 
         auto &faults = id(global_instance_faults)[category];
         
+        // Auto-Resize Vector if needed
         if (computer_instance >= faults.size()) {
            faults.resize(computer_instance + 1, false);
         }
 
-        // Only process if the state has changed
+        // Update only if state changed
         if (faults[computer_instance] != is_failing) {
-           // Update the registry
+           
+           // Update the specific instance in the list
            faults[computer_instance] = is_failing;
            
-           // Push the update to health sensor
+           // Trigger the sensor update
            id(global_update_health_sensor)();
+           
+           // Update the Master Mask ---
+           // Re-scan this category to see if it is now Clean or Faulted
+           bool cat_has_fault = false;
+           for(bool f : faults) {
+              if(f) { 
+                cat_has_fault = true; 
+                break; 
+              }
+           }
+
+           // Update the specific bit in the global mask
+           if(cat_has_fault) {
+               id(global_system_fault_mask) |= (1 << category); // Set Bit to 1
+           } else {
+               id(global_system_fault_mask) &= ~(1 << category); // Clear Bit to 0
+           }
         } 
       }
 
