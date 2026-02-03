@@ -21,7 +21,6 @@
 substitutions:
   global_status_led: "esp_light"
 
-
 globals:
   # 2D grid of physical LED pointers
   # Structure: [Component Category (0-15)] -> [Specific Instance ID (0-N)]
@@ -79,7 +78,7 @@ interval:
           static uint32_t next_event_ms = 0;  // Timestamp for the next non-blocking action
           static bool heartbeat_on = false;   // Toggle state for the healthy heartbeat
 
-          // --- NON-BLOCKING TIMER CHECK ---
+          // --- TIMER CHECK ---
           uint32_t now = millis();
           if (now < next_event_ms) return;
 
@@ -92,13 +91,13 @@ interval:
             // Logic: Scan for faults. If found, start sequence. If clean, pulse heartbeat.
             // =================================================================
             case 0: 
-              // 1. Circular Scan: Check all 16 categories for active fault flags
+              // Scan: Check all 16 categories for active fault flags
               for (int i = 1; i <= 16; i++) {
-                // Start searching from the category *after* the last one displayed to ensure rotation
+                // Start searching from the category after the last one displayed to ensure rotation
                 int search_target = (active_category + i) % 16;
                 bool is_faulted = (id(global_system_fault_mask) >> search_target) & 1;
                 
-                // 2. Validation: Ensure the faulted category actually has an LED assigned
+                // Validation: Ensure the faulted category actually has an LED assigned
                 bool has_valid_led = false;
                 if (is_faulted) {
                     for (auto *ptr : id(global_led_registry)[search_target]) {
@@ -109,7 +108,7 @@ interval:
                     }
                 }
 
-                // 3. Target Found: Transition to Stage 1 (Blue Header)
+                // Target Found: Transition to Stage 1 (Blue Header)
                 if (is_faulted && has_valid_led) {
                     active_category = search_target;
                     current_stage = 1; 
@@ -117,7 +116,7 @@ interval:
                 }
               }
 
-              // 4. No Faults Found: Execute Healthy Heartbeat (Category 0)
+              // No Faults Found: Execute Healthy Heartbeat (Category 0)
               if (!id(global_led_registry)[0].empty() && id(global_led_registry)[0][0] != nullptr) {
                 auto call = id(global_led_registry)[0][0]->make_call();
                 if (!heartbeat_on) {
@@ -180,7 +179,7 @@ interval:
               {
                 int total_toggles = (active_category + 1) * 2; 
                 
-                // A. Initial Gap Logic
+                // Initial Gap Logic
                 // If this is the first entry (count 0), turn off the Blue Header and wait.
                 if (pips_count == 0) {
                     for (auto *led : id(global_led_registry)[active_category]) {
@@ -191,8 +190,8 @@ interval:
                     return;
                 }
 
-                // B. Blink Logic
-                // Because we burned count=1 for the gap, odd numbers are now "Off" and even are "On"
+                // Blink Logic
+                // Odd numbers are "Off" and even are "On"
                 // This logic ensures the first visible pip is Red.
                 bool is_on_cycle = (pips_count % 2 != 0); 
                 
@@ -217,8 +216,8 @@ interval:
                 
                 pips_count++;
 
-                // C. Timing Logic
-                // We use total_toggles + 1 because the count started at 1 (the gap)
+                // Timing Logic
+                // Use total_toggles + 1 because the count started at 1 (the gap)
                 if (pips_count <= total_toggles) {
                    // Grouping: Add a longer 500ms pause after every 4th pip (8 toggles)
                    // Otherwise, use standard 150ms blink speed
@@ -251,3 +250,60 @@ interval:
               next_event_ms = now; 
               break;
           }
+
+
+
+  # LED Assignment Report in logs, enabled via enable_led_logging substitution
+  - interval: 60s
+    then:
+      - lambda: |-
+          // If the substitution is false, stop
+          if (!${enable_led_logging}) return;
+
+          ESP_LOGI("led_rpt", "┌──────────────────────────────┐");
+          ESP_LOGI("led_rpt", "│    LED REGISTRY ASSIGNMENT   │");
+          ESP_LOGI("led_rpt", "└──────────────────────────────┘");
+
+          bool registry_empty = true;
+
+          for (int cat = 0; cat < 16; cat++) {
+            // Access the LED Registry
+            auto &leds = id(global_led_registry)[cat];
+            
+            // Skip empty categories
+            if (leds.empty()) continue;
+            registry_empty = false;
+
+            // Translate ID to Name
+            std::string cat_name;
+            switch(cat) {
+                case 0: cat_name = "SYSTEM     "; break;
+                case 1: cat_name = "BMS        "; break;
+                case 2: cat_name = "CAN->INV   "; break;
+                case 3: cat_name = "RS485->INV "; break;
+                case 4: cat_name = "SHUNT      "; break;
+                case 5: cat_name = "BALANCER   "; break;
+                case 6: cat_name = "NETWORK    "; break;
+                case 7: cat_name = "AUX 1      "; break;
+                default: cat_name = "CAT_" + to_string(cat) + "     "; break;
+            }
+
+            // Build the status string for this category's LEDs
+            std::string status_line = "";
+            
+            for (size_t i = 0; i < leds.size(); i++) {
+                // Check if the pointer is valid
+                if (leds[i] != nullptr) {
+                    status_line += "[LINK] ";
+                } else {
+                    status_line += "[NULL] ";
+                }
+            }
+
+            ESP_LOGI("led_rpt", "   %s: %s", cat_name.c_str(), status_line.c_str());
+          }
+
+          if (registry_empty) {
+             ESP_LOGW("led_rpt", ">> WARNING: NO LEDS REGISTERED");
+          }
+          ESP_LOGI("led_rpt", "--------------------------------");

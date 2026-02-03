@@ -71,6 +71,27 @@ globals:
         faults[computer_instance] = is_failing;
       }
 
+  - id: global_update_health_sensor
+    type: "std::function<void()>"
+    # Function to update the system fault data sensor
+    initial_value: |-
+      []() {
+        std::string json = "[";
+        for (int cat = 0; cat < 16; cat++) {
+          auto &faults = id(global_instance_faults)[cat];
+          if (cat > 0) json += ","; 
+          json += "[";
+          for (size_t i = 0; i < faults.size(); i++) {
+            if (i > 0) json += ","; 
+            json += (faults[i] ? "1" : "0");
+          }
+          json += "]";
+        }
+        json += "]";
+        // Push the new string to the sensor immediately
+        id(sys_fault_data).publish_state(json);
+      }
+
 
 interval:
   # Summarize faults (Every 250ms)
@@ -79,12 +100,93 @@ interval:
     then:
       - lambda: |-
           uint16_t summary_mask = 0;
+          
+          // Calculate global_system_fault_mask
           for (int category = 0; category < 16; category++) {
             for (bool faulted : id(global_instance_faults)[category]) {
               if (faulted) {
                 summary_mask |= (1 << category);
-                break; // One fault in a category is enough to trigger the bit
+                break; 
               }
             }
           }
-          id(global_system_fault_mask) = summary_mask;
+
+          // Update system fault sensor if global_system_fault_mask changed
+          if (summary_mask != id(global_system_fault_mask)) {
+            // Update the mask
+            id(global_system_fault_mask) = summary_mask;
+            
+            // Push the update to health sensor
+            id(global_update_health_sensor)(); 
+          }
+          
+
+text_sensor:
+  # JSON sensor representing system fault data, use with markdown card in Home Assistant
+  - platform: template
+    name: "System Fault Data"
+    id: sys_fault_data
+    entity_category: diagnostic
+
+
+interval:
+  # System Health Report in logs, enabled via enable_health_logging substitution
+  - interval: 60s
+    then:
+      - lambda: |-
+          // If the substitution is false, stop
+          if (!${enable_health_logging}) return;
+
+          ESP_LOGI("health_rpt", "┌──────────────────────────────┐");
+          ESP_LOGI("health_rpt", "│     SYSTEM HEALTH REPORT     │");
+          ESP_LOGI("health_rpt", "└──────────────────────────────┘");
+
+          // Log Master Bitmask
+          uint16_t mask = id(global_system_fault_mask);
+          ESP_LOGI("health_rpt", "Global Fault Mask: %d (Binary: " BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN ")", 
+                   mask, BYTE_TO_BINARY(mask>>8), BYTE_TO_BINARY(mask));
+
+          // Iterate through all 16 Categories
+          bool system_clean = true;
+          
+          for (int cat = 0; cat < 16; cat++) {
+            auto &faults = id(global_instance_faults)[cat];
+            if (faults.empty()) continue;
+
+            std::string cat_name;
+            switch(cat) {
+                case 0: cat_name = "SYSTEM     "; break;
+                case 1: cat_name = "BMS        "; break;
+                case 2: cat_name = "CAN->INV   "; break;
+                case 3: cat_name = "RS485->INV "; break;
+                case 4: cat_name = "SHUNT      "; break;
+                case 5: cat_name = "BALANCER   "; break;
+                case 6: cat_name = "NETWORK    "; break;
+                case 7: cat_name = "AUX 1      "; break;
+                default: cat_name = "CAT_" + to_string(cat) + "     "; break;
+            }
+
+            std::string status_line = "";
+            bool cat_has_fault = false;
+
+            for (size_t i = 0; i < faults.size(); i++) {
+                if (faults[i]) {
+                    status_line += "[FAIL] ";
+                    cat_has_fault = true;
+                    system_clean = false;
+                } else {
+                    status_line += "[ OK ] ";
+                }
+            }
+
+            if (cat_has_fault) {
+                ESP_LOGW("health_rpt", ">> %s: %s", cat_name.c_str(), status_line.c_str());
+            } else {
+                ESP_LOGI("health_rpt", "   %s: %s", cat_name.c_str(), status_line.c_str());
+            }
+          }
+
+          if (system_clean) {
+             ESP_LOGI("health_rpt", ">> ALL SYSTEMS NORMAL");
+          }
+          ESP_LOGI("health_rpt", "--------------------------------");
