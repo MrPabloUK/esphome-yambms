@@ -120,16 +120,6 @@ interval:
             id(global_update_health_sensor)(); 
           }
           
-
-text_sensor:
-  # JSON sensor representing system fault data, use with markdown card in Home Assistant
-  - platform: template
-    name: "System Fault Data"
-    id: sys_fault_data
-    entity_category: diagnostic
-
-
-interval:
   # System Health Report in logs, enabled via enable_health_logging substitution
   - interval: 60s
     then:
@@ -190,3 +180,10 @@ interval:
              ESP_LOGI("health_rpt", ">> ALL SYSTEMS NORMAL");
           }
           ESP_LOGI("health_rpt", "--------------------------------");
+
+text_sensor:
+  # JSON sensor representing system fault data, use with markdown card in Home Assistant
+  - platform: template
+    name: "System Fault Data"
+    id: sys_fault_data
+    entity_category: diagnostic
