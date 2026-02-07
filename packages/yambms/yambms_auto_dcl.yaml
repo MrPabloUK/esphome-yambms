@@ -95,7 +95,7 @@ interval:
             } else {
               float ratio = max(0.0f, ((min_cell_v - ${discharge_knee_v}) / (cell_low_v - ${discharge_knee_v})));
               float curve = pow(${discharge_a_factor_curve_end}, pow(ratio, ${discharge_a_factor_curve_shape}));
-              delta = max(0.0f, (-curve + 2) * max_current) - max_current;
+              delta = max(0.0f, (-curve + 2.0f) * max_current) - max_current;
             }
 
             if (!is_initialized) {
