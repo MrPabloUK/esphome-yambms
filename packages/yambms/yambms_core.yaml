@@ -1,5 +1,5 @@
-# Updated : 2026.06.27
-# Version : 1.7.0
+# Updated : 2026.07.08
+# Version : 1.7.1
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
 # YamBMS ( Yet another multi-BMS Merging Solution )
@@ -18,7 +18,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
 
 substitutions:
-  yambms_version: "1.7.0"
+  yambms_version: "1.7.1"
 
 globals:
   # BMS
@@ -278,7 +278,11 @@ globals:
     type: float
     restore_value: no
     initial_value: '0.0'
-  - id: yambms${yambms_id}_var_auto_ccl_soft_landing
+  - id: yambms${yambms_id}_var_auto_custom_ccl
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: yambms${yambms_id}_var_auto_custom_dcl
     type: float
     restore_value: no
     initial_value: '0.0'
@@ -351,8 +355,8 @@ esphome:
             id(yambms${yambms_id}_bulk_voltage).traits.set_min_value(round(cell_count * id(yambms${yambms_id}_var_cell_min_charge_v) * 10) / 10);
             id(yambms${yambms_id}_bulk_voltage).traits.set_max_value(round(cell_count * id(yambms${yambms_id}_var_cell_max_charge_v) * 10) / 10);
             // Float V.
-            id(yambms${yambms_id}_float_voltage).traits.set_min_value(round(cell_count * (id(yambms${yambms_id}_var_cell_min_charge_v) - 0.15) * 10) / 10);
-            id(yambms${yambms_id}_float_voltage).traits.set_max_value(round(cell_count * (id(yambms${yambms_id}_var_cell_min_charge_v) + 0.05) * 10) / 10);
+            id(yambms${yambms_id}_float_voltage).traits.set_min_value(round(cell_count * id(yambms${yambms_id}_var_cell_nominal_v) * 10) / 10);
+            id(yambms${yambms_id}_float_voltage).traits.set_max_value(round(cell_count * id(yambms${yambms_id}_var_cell_max_charge_v) * 10) / 10);
             // Rebulk V.
             id(yambms${yambms_id}_rebulk_voltage).traits.set_min_value(round(cell_count * id(yambms${yambms_id}_var_cell_nominal_v) * 10) / 10);
             id(yambms${yambms_id}_rebulk_voltage).traits.set_max_value(round(cell_count * id(yambms${yambms_id}_var_cell_min_charge_v) * 10) / 10);
@@ -497,19 +501,27 @@ interval:
 
             if (id(yambms${yambms_id}_var_to_combine_bms_counter) > 0)
             {
+              // User-defined hard ceiling (slider)
               float max_charge_current_yambms = id(yambms${yambms_id}_max_requested_charge_current).state;
+              // BMS protection guard : aggregated OCP values with 10% safety margin
               float max_charge_current_bms = id(yambms${yambms_id}_var_total_max_charge_current) * 0.9;
+              // Nominal charge current : total battery capacity x global C-Rate (default 0.5C)
+              float max_charge_current_crate = battery_capacity * id(yambms${yambms_id}_max_charge_crate).state;
 
-              if (max_charge_current_bms > max_charge_current_yambms)
-                max_charge_current = max_charge_current_yambms;
-              else
-                max_charge_current = max_charge_current_bms;
+              // The max charge current is the lowest of the three values
+              max_charge_current = std::min({
+                max_charge_current_yambms,
+                max_charge_current_bms,
+                max_charge_current_crate
+              });
 
               ESP_LOGD("yambms_debug", "Max charge current YamBMS : %f A", max_charge_current_yambms);
               ESP_LOGD("yambms_debug", "Max charge current BMS : %f A", max_charge_current_bms);
+              ESP_LOGD("yambms_debug", "Max charge current C-Rate : %f A", max_charge_current_crate);
 
               if (cc_step == 0) id(yambms${yambms_id}_var_charge_current_step) = 1;
             }
+
             id(yambms${yambms_id}_max_charge_current).publish_state(round(max_charge_current));
             ESP_LOGD("yambms_debug", "Max charge current : %f A", max_charge_current);
 
@@ -524,19 +536,27 @@ interval:
 
             if (id(yambms${yambms_id}_var_to_combine_bms_counter) > 0)
             {
+              // User-defined hard ceiling (slider)
               float max_discharge_current_yambms = id(yambms${yambms_id}_max_requested_discharge_current).state;
+              // BMS protection guard : aggregated OCP values with 10% safety margin
               float max_discharge_current_bms = id(yambms${yambms_id}_var_total_max_discharge_current) * 0.9;
+              // Nominal discharge current : total battery capacity x global C-Rate (default 1C)
+              float max_discharge_current_crate = battery_capacity * id(yambms${yambms_id}_max_discharge_crate).state;
 
-              if (max_discharge_current_bms > max_discharge_current_yambms)
-                max_discharge_current = max_discharge_current_yambms;
-              else
-                max_discharge_current = max_discharge_current_bms;
+              // The max discharge current is the lowest of the three values
+              max_discharge_current = std::min({
+                max_discharge_current_yambms,
+                max_discharge_current_bms,
+                max_discharge_current_crate
+              });
 
               ESP_LOGD("yambms_debug", "Max discharge current YamBMS : %f A", max_discharge_current_yambms);
               ESP_LOGD("yambms_debug", "Max discharge current BMS : %f A", max_discharge_current_bms);
+              ESP_LOGD("yambms_debug", "Max discharge current C-Rate : %f A", max_discharge_current_crate);
 
               if (dc_step == 0) id(yambms${yambms_id}_var_discharge_current_step) = 1;
             }
+
             id(yambms${yambms_id}_max_discharge_current).publish_state(round(max_discharge_current));
             ESP_LOGD("yambms_debug", "Max discharge current : %f A", max_discharge_current);
 
@@ -924,12 +944,12 @@ interval:
               requested_charge_voltage = 0;
             // Bulk
             else if (charging_instruction == "Bulk")
-              requested_charge_voltage = (id(yambms${yambms_id}_bulk_voltage).state + id(yambms${yambms_id}_inverter_offset_v).state + id(yambms${yambms_id}_var_auto_cvl));
+              requested_charge_voltage = (id(yambms${yambms_id}_bulk_voltage).state + id(yambms${yambms_id}_charger_offset_v).state + id(yambms${yambms_id}_var_auto_cvl));
             // Float
             else if (charging_instruction == "Float")
-              requested_charge_voltage = (id(yambms${yambms_id}_float_voltage).state + id(yambms${yambms_id}_inverter_offset_v).state) + id(yambms${yambms_id}_var_auto_float);
+              requested_charge_voltage = (id(yambms${yambms_id}_float_voltage).state + id(yambms${yambms_id}_charger_offset_v).state) + id(yambms${yambms_id}_var_auto_float);
             // Stop Charging
-            else requested_charge_voltage = (id(yambms${yambms_id}_rebulk_voltage).state + id(yambms${yambms_id}_inverter_offset_v).state);
+            else requested_charge_voltage = (id(yambms${yambms_id}_rebulk_voltage).state + id(yambms${yambms_id}_charger_offset_v).state);
             // Publish the sensor
             id(yambms${yambms_id}_requested_charge_voltage).publish_state(requested_charge_voltage);
 
@@ -959,11 +979,11 @@ interval:
               if ((charging_instruction == "Bulk") || (charging_instruction == "Float"))
               {
                 float auto_limit = std::min({
-                  id(yambms${yambms_id}_var_auto_ccl), 
-                  id(yambms${yambms_id}_var_auto_eoc), 
                   id(yambms${yambms_id}_var_auto_temperature_ccl),
-                  id(yambms${yambms_id}_var_auto_ccl_soft_landing),
+                  id(yambms${yambms_id}_var_auto_ccl),
                   id(yambms${yambms_id}_var_auto_soc_limit),
+                  id(yambms${yambms_id}_var_auto_eoc),
+                  id(yambms${yambms_id}_var_auto_custom_ccl)
                 });
 
                 requested_charge_current = round(id(yambms${yambms_id}_max_charge_current).state + auto_limit);
@@ -992,8 +1012,9 @@ interval:
               if (discharging_instruction == true)
               {
                 float auto_limit = std::min({
-                  id(yambms${yambms_id}_var_auto_dcl), 
-                  id(yambms${yambms_id}_var_auto_temperature_dcl)
+                  id(yambms${yambms_id}_var_auto_temperature_dcl),
+                  id(yambms${yambms_id}_var_auto_dcl),
+                  id(yambms${yambms_id}_var_auto_custom_dcl)
                 });
 
                 requested_discharge_current = round(id(yambms${yambms_id}_max_discharge_current).state + auto_limit);
@@ -1194,9 +1215,12 @@ binary_sensor:
 # | number                               |
 # +--------------------------------------+
 number:
+
   #
   # Min/max values ​​are updated automatically based on battery chemistry and cell count.
   #
+
+  # Bulk voltage
   - platform: template
     name: "Bulk voltage"
     id: yambms${yambms_id}_bulk_voltage
@@ -1211,6 +1235,7 @@ number:
     icon: mdi:battery-charging
     optimistic: true
     entity_category: config
+  # Float voltage
   - platform: template
     name: "Float voltage"
     id: yambms${yambms_id}_float_voltage
@@ -1225,6 +1250,7 @@ number:
     icon: mdi:battery-charging
     optimistic: true
     entity_category: config
+  # Rebulk Voltage
   - platform: template
     name: "Rebulk V."
     id: yambms${yambms_id}_rebulk_voltage
@@ -1239,6 +1265,7 @@ number:
     icon: mdi:sine-wave
     optimistic: true
     entity_category: config
+  # Rebulk SoC
   - platform: template
     name: "Rebulk SoC"
     id: yambms${yambms_id}_rebulk_soc
@@ -1253,6 +1280,7 @@ number:
     icon: mdi:battery-medium
     optimistic: true
     entity_category: config
+  # Rebulk Days
   - platform: template
     name: "Rebulk Days"
     id: yambms${yambms_id}_rebulk_days
@@ -1270,9 +1298,10 @@ number:
     on_value:
       then:
         - lambda: id(yambms${yambms_id}_var_rebulk_days_active) = false;
+  # Charger Offset V.
   - platform: template
-    name: "Inverter Offset V."
-    id: yambms${yambms_id}_inverter_offset_v
+    name: "Charger Offset V."
+    id: yambms${yambms_id}_charger_offset_v
     device_id: yambms_yambms${yambms_id}
     step: 0.1
     min_value: 0
@@ -1284,7 +1313,7 @@ number:
     icon: mdi:sine-wave
     optimistic: true
     entity_category: config
-    # internal: true
+  # Max requested charge current
   - platform: template
     name: "Max requested charge current"
     id: yambms${yambms_id}_max_requested_charge_current
@@ -1299,6 +1328,7 @@ number:
     icon: mdi:current-dc
     optimistic: true
     entity_category: config
+  # Max requested discharge current
   - platform: template
     name: "Max requested discharge current"
     id: yambms${yambms_id}_max_requested_discharge_current
@@ -1313,6 +1343,41 @@ number:
     icon: mdi:current-dc
     optimistic: true
     entity_category: config
+  # Max. Continuous Charging Power / Standard Charging Power
+  # EVE LF280K V3 = 1P / 0.5P
+  # EVE MB31 = 0.5P / 0.5P
+  - platform: template
+    name: "Max charge C-Rate"
+    id: yambms${yambms_id}_max_charge_crate
+    device_id: yambms_yambms${yambms_id}
+    step: 0.05
+    min_value: 0.05
+    max_value: 1
+    restore_value: true
+    mode: "${yambms_input_number_mode}"
+    initial_value: 0.5
+    unit_of_measurement: C
+    icon: mdi:battery-charging
+    optimistic: true
+    entity_category: config
+  # Max. Continuous Discharging Power / Standard Discharging Power
+  # EVE LF280K V3 = 1P / 0.5P
+  # EVE MB31 = 0.5P / 0.5P
+  - platform: template
+    name: "Max discharge C-Rate"
+    id: yambms${yambms_id}_max_discharge_crate
+    device_id: yambms_yambms${yambms_id}
+    step: 0.05
+    min_value: 0.05
+    max_value: 1
+    restore_value: true
+    mode: "${yambms_input_number_mode}"
+    initial_value: 0.5
+    unit_of_measurement: C
+    icon: mdi:battery-minus
+    optimistic: true
+    entity_category: config
+  # Request Force Charge Start SoC
   - platform: template
     name: "Request Force Charge Start SoC"
     id: yambms${yambms_id}_request_force_charge_start_soc
@@ -1327,6 +1392,7 @@ number:
     icon: mdi:battery-low
     optimistic: true
     entity_category: config
+  # Request Force Charge Stop SoC
   - platform: template
     name: "Request Force Charge Stop SoC"
     id: yambms${yambms_id}_request_force_charge_stop_soc
@@ -2097,20 +2163,21 @@ text_sensor:
     update_interval: never
     entity_category: diagnostic
     lambda: |-
+
       float limit_1 = id(yambms${yambms_id}_var_auto_temperature_ccl);
-      float limit_2 = id(yambms${yambms_id}_var_auto_eoc);
-      float limit_3 = id(yambms${yambms_id}_var_auto_ccl);
-      float limit_4 = id(yambms${yambms_id}_var_auto_ccl_soft_landing);
-      float limit_5 = id(yambms${yambms_id}_var_auto_soc_limit);
+      float limit_2 = id(yambms${yambms_id}_var_auto_ccl);
+      float limit_3 = id(yambms${yambms_id}_var_auto_soc_limit);
+      float limit_4 = id(yambms${yambms_id}_var_auto_eoc);
+      float limit_5 = id(yambms${yambms_id}_var_auto_custom_ccl);
 
       float min_val = std::min({limit_1, limit_2, limit_3, limit_4, limit_5});
 
       if (min_val == 0.0f) return {"No Derating"};
       if (min_val == limit_1) return {"Temperature Derating"};
-      if (min_val == limit_2) return {"EOC Derating"};
-      if (min_val == limit_3) return {"AutoCCL Derating"};
-      if (min_val == limit_4) return {"Soft Landing Derating"};
-      if (min_val == limit_5) return {"SoC Limit Derating"};
+      if (min_val == limit_2) return {"Auto CCL Derating"};
+      if (min_val == limit_3) return {"SoC Limit Derating"};
+      if (min_val == limit_4) return {"EOC Derating"};
+      if (min_val == limit_5) return {"Custom CCL Derating"};
       return {"Unknown"};
 
   # +----------------------------------------+
@@ -2126,10 +2193,12 @@ text_sensor:
     lambda: |-
       float limit_1 = id(yambms${yambms_id}_var_auto_temperature_dcl);
       float limit_2 = id(yambms${yambms_id}_var_auto_dcl);
+      float limit_3 = id(yambms${yambms_id}_var_auto_custom_dcl);
 
-      float min_val = std::min(limit_1, limit_2);
+      float min_val = std::min({limit_1, limit_2, limit_3});
 
       if (min_val == 0.0f) return {"No Derating"};
       if (min_val == limit_1) return {"Temperature Derating"};
-      if (min_val == limit_2) return {"AutoDCL Derating"};  
+      if (min_val == limit_2) return {"Auto DCL Derating"};
+      if (min_val == limit_3) return {"Custom DCL Derating"};
       return {"Unknown"};
