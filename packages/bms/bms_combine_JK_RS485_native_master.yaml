@@ -1,0 +1,70 @@
+# Updated : 2026.10.13
+# Version : 1.0.0
+# GitHub  : https://github.com/MrPabloUK/esphome-jk-rs485-native
+
+# YamBMS ( Yet another multi-BMS Merging Solution )
+
+# This YAML is free software: you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation, either version 3
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
+
+# Native dump master (DIP 0x01-0x0F / mode 2). Do not load jk_rs485_sniffer
+# / jk_rs485_bms on the same ESP. protocol_version is set on each BMS pack.
+
+substitutions:
+  sniffer_id: "jk_sniffer_1"
+  sniffer_name: "JK sniffer"
+
+packages:
+  modbus_sniffer: !include bms_base_sniffer_sub_device.yaml
+
+# +--------------------------------------+
+# | Component settings                   |
+# +--------------------------------------+
+
+external_components:
+  - source: github://MrPabloUK/esphome-jk-rs485-native@main
+    refresh: 60min
+    components: [ jk_rs485_native_master , jk_rs485_native_bms ]
+  # - source:
+  #     type: local
+  #     path: ../esphome-jk-rs485-native/components
+
+jk_rs485_native_master:
+  - id: ${sniffer_id}
+    uart_id: ${sniffer_uart_id}
+    response_timeout: 200ms
+    inter_byte_timeout: 30ms
+    offline_retry_interval: 5s
+    min_command_gap: 150ms
+    turnaround: 25ms
+    poll:
+      cell_info: 1s
+      settings: 30s
+      device_info: 1h
+
+# +--------------------------------------+
+# | Component entities                   |
+# +--------------------------------------+
+
+switch:
+  - platform: template
+    device_id: sniffer_${sniffer_uart_id}
+    name: "Broadcasting BMS settings to all BMS"
+    icon: "mdi:cast"
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: true
+    entity_category: config
+    turn_on_action:
+      - lambda: id(${sniffer_id}).set_broadcast_changes(true);
+    turn_off_action:
+      - lambda: id(${sniffer_id}).set_broadcast_changes(false);
