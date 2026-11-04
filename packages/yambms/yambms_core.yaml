@@ -1,4 +1,4 @@
-# Updated : 2026.08.31
+# Updated : 2026.11.04
 # Version : 1.8.0
 # GitHub  : https://github.com/Sleeper85/esphome-yambms
 
@@ -353,6 +353,7 @@ esphome:
   devices:
     - id: yambms_yambms${yambms_id}
       name: "${yambms_name}"
+      relation: via
 
   # Execute once
   on_boot:
