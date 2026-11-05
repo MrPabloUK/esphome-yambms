@@ -407,6 +407,15 @@ Take the time to configure `YamBMS` correctly according to your battery chemistr
 
 The CAN bus connected to your inverter via the CAN transceiver `canbus_inverter_1`.
 
+> [!NOTE]
+> A package that uses a CAN bus declares its node itself, so there is no CAN interface to include
+> separately. `canbus_platform` selects the controller and has no default :
+>
+> - `esp32_can` : CAN controller of the ESP32, with a TJA105x, SN65HVD230 or M5Stack CAN base/unit transceiver.
+> - `mcp2515` : MCP2515 module on the SPI bus.
+> - `external` : the node is already declared, by the board (espBerry) or by another package. This
+>   is what a second link on the same node must use.
+
 You can keep the default configuration and adapt the `canbus` node on which the component must connect.
 
 ```YAML
@@ -415,15 +424,18 @@ You can keep the default configuration and adapt the `canbus` node on which the 
     ref: main
     refresh: 0s
     files:
-      - path: 'packages/yambms/yambms_canbus.yaml'
+      - path: 'packages/yambms/yambms_canbus.yaml' # yambms_canbus_web_server.yaml
         vars:
-          canbus_id: 'canbus1'
+          canbus_id: '1' # must be a number
           canbus_name: 'CANBUS 1'
-          canbus_node_id: 'canbus_inverter_1'
-          canbus_light_id: 'esp_light'
-          # The CANBUS link will be considered down if no response from the inverter (0x305 frame) for 5s
-          # The Deye inverter sends the ACK 0x305 only when it receives the 0x356 frame.
-          canbus_link_timer: '5s'
+          canbus_status_led_id: 'esp_light' # LED used to show status; default = esp_light, comment out to disable
+          # CAN frames sending will be paused for `30s` if the inverter does not respond with an ACK (can_id 0x305) before the end of the `canbus_link_timer` (5s by default).
+          canbus_link_timer_enabled: 'true' # Set it to 'false' if your inverter/charger is not sending ACK (can_id 0x305) every `1s` as specified by the protocol
+          canbus_link_timer: '10s' # min 6s with Deye
+          # CAN setup
+          canbus_platform: 'esp32_can'        # esp32_can / mcp2515
+          canbus_node_id: 'canbus_inverter_1' # CAN bus node to which your inverter is connected
+          canbus_bitrate: '500kbps'           # Default : 500kbps
 ```
 
 # RS485 bus to Inverter
@@ -434,21 +446,31 @@ You can keep the default configuration and adapt the `canbus` node on which the 
 
 The RS485 bus connected to your inverter via the RS485 transceiver `uart_esp_3`.
 
+> [!NOTE]
+> A package that uses a UART declares it itself from its `*_uart_id` var, so there is no UART to
+> include separately. Each UART can only be used by one package. If your RS485 transceiver needs a
+> `flow_control_pin`, add `uart_flow_control_pin: ${talk_pin}` to the `vars:` of that package
+> (native ESP32 UART only, not on a WK2168 channel).
+
 You can keep the default configuration and adapt the `uart` port on which the component must connect.
 
 ```YAML
-  rs485_pylon:
+  rs485_1:
     url: https://github.com/Sleeper85/esphome-yambms
     ref: main
     refresh: 0s
     files:
-      - path: 'packages/yambms/yambms_rs485_pylon.yaml'
+      - path: 'packages/yambms/yambms_rs485.yaml'
+      # - path: 'packages/yambms/yambms_rs485_web_server.yaml'
         vars:
-          rs485_id: 'rs485_1'
+          rs485_id: '1'                    # Must be a number
           rs485_name: 'RS485 1'
-          rs485_uart_id: 'uart_esp_3' # UART interface to which your inverter is connected
-          rs485_uart_baud_rate: '9600'
-          rs485_update_timeout: '5s'
+          rs485_protocol: 'pylon'          # pylon / voltronic
+          rs485_update_timeout: '10s'
+          rs485_status_led_id: 'esp_light' # LED used to show status; default = esp_light, comment out to disable
+          # UART setup
+          rs485_uart_id: 'uart_esp_3'      # UART interface to which your inverter is connected
+          rs485_uart_baud_rate: '9600'     # Default : 9600 / Epever : 115200
 ```
 
 ## Debug

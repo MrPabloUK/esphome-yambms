@@ -6,6 +6,30 @@
 ![GitHub forks](https://img.shields.io/github/forks/Sleeper85/esphome-yambms)
 ![GitHub watchers](https://img.shields.io/github/watchers/Sleeper85/esphome-yambms)
 
+* YamBMS 1.8.1 :
+  * Set esphome `min_version` to `2026.10.0`
+  * **Breaking change** - New `Inverter brand` select and reworked `Protocol` select : selecting your inverter brand is enough, the protocol follows ; a protocol chosen explicitly still takes priority over the brand. Both selects are renamed, so their stored value is reset : **the inverter link stays inactive until you select your inverter brand**, see [release note](documents/README/changelog/Changelog_Inverter_brand_and_protocol.md)
+
+  * Removed the `YamBMS name` select : the manufacturer name sent on CAN frame `0x35E` is now derived from the protocol in use, which is what the `Automatic` mode already did ; the `GOODWE`, `SHEnergy` and `BYD` names are no longer selectable
+
+  * **Breaking change** - A package that uses a UART now declares it itself from its `*_uart_id` var : remove the `board_options_itf_uart_*.yaml` includes and the `UART flow control` block from your YAML, otherwise ESPHome reports `Expected integer, but cannot parse ${uart_baud_rate}`. Each UART can only be used by one package : two packages on the same UART report `ID uart_esp_1 redefined`
+  * Baud rates are set in the `vars:` of the package and keep their names ; packages that had none get `bms_uart_baud_rate`, `sniffer_uart_baud_rate` and `shunt_uart_baud_rate`, with the speed of the device as default
+  * New `uart_flow_control_pin` var on any package using a native ESP32 UART, which replaces the `board_options_itf_uart_flow_control.yaml` include ; the `_talk_pin` packages stay available for the rare setups that need them but are no longer shown in the examples
+  * WK2168 channels are now declared the same way : `board_options_itf_wk2168_spi.yaml` or `board_options_itf_wk2168_i2c.yaml` replaces the PVbrain2 files in your YAML, the `uartN_baudrate` substitutions and `uart_hub_bus` are removed (write `uart_spi_3`), and `board_options_itf_modbus_expander.yaml` and `shunt_combine_Victron_SmartShunt_UART_expander.yaml` are removed
+
+  * **Breaking change** - A package that uses a CAN bus now declares its node itself : remove the `board_options_itf_canbus_*.yaml` includes from your YAML, otherwise ESPHome fails on the unresolved `${canbus_bit_rate}`, and add `canbus_platform` (`esp32_can` or `mcp2515`) to the `yambms_canbus.yaml` package and to the Deye `top` package. A node declared by the board, or a second link on the same node, uses `canbus_platform: 'external'`
+  * The CAN bit rate is set with the new `canbus_bitrate` var (default `500kbps`), which replaces `esp32_canbus_bitrate` and `mcp2515_canbus_bitrate`
+  * RS485 packages reorganised for the additional protocols to come : the file you include changes from `yambms_rs485_pylon.yaml` to `yambms_rs485.yaml`, which now takes a `rs485_protocol` var (`pylon` or `voltronic`) and includes the matching protocol implementation for you ; a node with several RS485 links on different UARTs can run a different protocol on each, one var per link ; `yambms_rs485_pylon_web_server.yaml` becomes `yambms_rs485_web_server.yaml` and includes the entry point itself : use it instead of `yambms_rs485.yaml`, with the same `vars:`, see [release note](documents/README/changelog/Changelog_Inverter_brand_and_protocol.md)
+
+  * New diagnostic entities per inverter link : `Inverter link protocol` (what the link is actually doing, e.g. `Solis - CAN SMA`), `Inverter battery mode` (how to configure the battery type on the inverter, keyed on brand *and* protocol so that forcing a protocol never displays a wrong instruction) and `Note` (what is specific to that brand and protocol)
+  * Renamed CAN protocol `PYLON 1.2` to `PYLON V1` and RS485 protocol `Pylontech` to `PYLON`
+  * Schneider XW Pro : the extended 29-bit ACK is now handled automatically and the `canbus_extended_ack` substitution is removed - both the 11-bit and the 29-bit ACK are listened to at the same time, which the CAN component supports natively
+  * A link whose protocol is set to `Disabled` no longer lights the fault LED : it is unregistered from the fault registry (state that the master mask and the health report both ignore) instead of being reported as failing, since it is a deliberate choice and not a communication loss ; a link left unconfigured still faults, on purpose
+  * Changing the inverter brand or protocol now restarts the CAN frames immediately instead of waiting for the next 30s retry tick, so the link comes up as soon as the selection is made
+  * Fixed the RS485 link staying up with `Disabled` : the proxy sensors kept their last value, so the Pylontech component went on answering the inverter with stale data and kept reporting its status as ON ; the sensors it checks are now invalidated when the protocol is off, which makes it stop answering and report the link as down
+  * Fixed the CAN bus not stopping when the protocol was set to `Disabled` at runtime : the frame index kept its previous value and the last frame was re-emitted every 100 ms
+  * Fixed the reported communication bus and protocol being overwritten when a node declares several inverter links : each link now owns its slot, and the telemetry reports every link instead of the last one
+
 * YamBMS 1.8.0 :
   * Set esphome `min_version` to `2026.8.0`
   * Updated HA dashboards `1.8.0` for the new Cut-Off Cell Voltage, Charger Offset V., C-Rate and Auto CCL Current Taper entities

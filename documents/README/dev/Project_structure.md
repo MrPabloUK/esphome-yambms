@@ -34,8 +34,18 @@ registry (`device_base_fault_registry.yaml`), memory and PSRAM debug helpers.
 ### `board/`
 
 One file per board (`board_ESP32-S3_*.yaml`) defining pins and GPIO. The `board_options_*.yaml`
-files are optional building blocks — UART, CAN, PSRAM, LVGL display, WiFi AP — included
-separately depending on the hardware.
+files are optional building blocks — CAN, PSRAM, LVGL display, WiFi AP — included separately
+depending on the hardware.
+
+The `board_options_itf_uart_*.yaml` files are the exception: they are not included from the main
+YAML. Each one declares a single UART (`uart_esp_N`, `uart_N` on the RPi Pico, `uart_spi_N` and
+`uart_i2c_N` on a WK2168) and is imported by the package that consumes that UART, from its
+`*_uart_id` var. A WK2168 only needs `board_options_itf_wk2168_spi.yaml` or
+`board_options_itf_wk2168_i2c.yaml` in the main YAML, which declares the bridges.
+
+The `board_options_itf_canbus_*.yaml` files follow the same rule: `yambms_canbus.yaml` and the
+Deye top packages import the one named by their `canbus_platform` var (`esp32_can`, `mcp2515`, or
+`external` for a node declared elsewhere).
 
 ### `bms/`, `shunt/`, `balancer/`
 
@@ -51,9 +61,16 @@ All three follow the same layered scheme, per brand and protocol:
 
 ### `yambms/`
 
-The central engine. `yambms.yaml` aggregates `yambms_core.yaml`, the `yambms_auto_*.yaml`
-functions (CVL / CCL / DCL / Float / EOC / temperature / SoC limit) and `yambms_service.yaml`,
-then `yambms_canbus*.yaml` or `yambms_rs485_pylon*.yaml` for the link to the inverter.
+The central engine. `yambms.yaml` aggregates `yambms_brand_registry.yaml`,
+`yambms_core.yaml`, the `yambms_auto_*.yaml` functions (CVL / CCL / DCL / Float / EOC /
+temperature / SoC limit) and `yambms_service.yaml`, then `yambms_canbus*.yaml` or
+`yambms_rs485*.yaml` for the link to the inverter.
+
+`yambms_brand_registry.yaml` holds the protocol dictionary (`YB_PROTO_*`), the brand to
+protocol mapping and the per-couple battery mode and note. Both inverter buses read it.
+
+On the RS485 side, `yambms_rs485.yaml` is the entry point — selects, diagnostics, telemetry
+slot — and it includes the protocol implementation, currently `yambms_rs485_pylon.yaml`.
 
 ## Where the behaviour is documented
 

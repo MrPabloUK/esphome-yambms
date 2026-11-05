@@ -1,6 +1,6 @@
-# Updated : 2024.12.23
+# Updated : 2026.11.05
 # Version : 1.1.1
-# GitHub  : https://github.com/Sleeper85/esphome-junctek_khf
+# GitHub  : https://github.com/Sleeper85/esphome-yambms
 
 # YamBMS ( Yet another multi-BMS Merging Solution )
 
@@ -17,6 +17,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
 
-packages:
-  shunt_sensors: !include shunt_sensors_Victron_SmartShunt_UART.yaml
-  shunt_combine: !include shunt_combine.yaml
+# `canbus_platform: 'external'` : the CAN node is declared elsewhere, so this file declares
+# nothing. It is used for a node declared by the board file (espBerry) or already imported by
+# another package (a second link on the same node).
+
+{}

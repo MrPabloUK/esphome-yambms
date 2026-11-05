@@ -42,9 +42,11 @@ The condition in `bms_combine.yaml` checks every sensor the combiner will read. 
 purpose: a single missing or `NaN` value entering the totals corrupts the aggregate that drives
 the inverter. Do not shorten it to a few representative checks.
 
-Note that the checks are not uniform. Most use `has_state()`, but `total_voltage`,
-`battery_capacity`, `max_charge_current` and `max_discharge_current` use `> 0` — a BMS reporting
-zero for those is treated as not ready rather than as a valid reading.
+Note that the checks are not uniform. Most use `has_state()`, but `total_voltage` and
+`battery_capacity` use `> 0` — a BMS reporting zero for those is treated as not ready rather than
+as a valid reading. `max_charge_current` and `max_discharge_current` use `>= 0`: `0 A` is a valid
+limit that a BMS can announce, and it must not take that BMS out of the combination. A `NaN` still
+fails the comparison, so a limit that was never received keeps the BMS uncombined.
 
 ### Combined by contribution, combined continuously, uncombined
 
@@ -251,6 +253,270 @@ whoever edits the file next.
 `esp32_date_time_now` keeps its own poller, because it has no source sensor to hang a trigger on.
 There the guard is `now().is_valid()`, and it is the right tool: the problem is an NTP sync that
 may not have happened yet, not a scheduling order.
+
+## The inverter protocol is resolved once, never in the loop
+
+**Files:** `packages/yambms/yambms_brand_registry.yaml`, `packages/yambms/yambms_canbus.yaml`,
+`packages/yambms/yambms_rs485.yaml`
+
+The protocol actually applied on a link is not readable from a single select. It is the result of
+a resolution with two inputs: the `Protocol` select, and — when that one is on `Automatic` — the
+`Inverter brand` select passed through the registry's mapping.
+
+That resolution runs in a script, triggered at boot and on `on_value` of either select, and its
+result is stored in `canbus${canbus_id}_active_protocol` / `rs485${rs485_id}_active_protocol`.
+Everything else only reads that integer.
+
+Do not inline the resolution back into the consumers. The 100 ms sequencing interval, the five
+protocol branches and the four LuxPower payload tweaks would each redo a table lookup and a
+series of `std::string` comparisons ten times a second, for a value that only changes when a user
+touches a select.
+
+Do not dispatch on `active_index()` either. That is what the code did before: `active_index() == 5`
+meant LuxPower purely by convention of the option order, so reordering the select silently broke
+four payload branches in different frames. The `YB_PROTO_*` constants are named, and the
+conversion from option string to constant exists in exactly one place — the resolution script.
+
+`on_value` is used and **not** `set_action`: `TemplateSelectWithSetAction::control()` fires the
+set trigger *before* `publish_state()`, so a script called from `set_action` would read the
+previous option.
+
+### The resolution must not run during setup
+
+`on_value` also fires when the select restores its value, at `setup_priority::HARDWARE` (800).
+The telemetry slot, on the other hand, is reserved in `on_boot` at `priority: -100`. Between the
+two, the vectors in `yambms_core.yaml` are still empty, so the script would index element `0` of
+an empty `std::vector` and the device would crash on every boot. The registry's `std::function`
+globals are at `HARDWARE` too, so calling them that early is a race of its own.
+
+`canbus${canbus_id}_link_ready` / `rs485${rs485_id}_link_ready` is what closes both holes: the
+script returns immediately until the slot has been reserved, and the reservation raises the flag
+then runs the script explicitly. Do not drop that guard on the grounds that the `has_state()`
+check above it already protects the script — it does not, it only proves the selects have a value.
+
+### The `YB_PROTO_*` values are internal
+
+They are never persisted, never published to Home Assistant and never sent to the telemetry
+service — the label from `global_inverter_protocol_label()` is what leaves the device. So the
+ranges can be renumbered or extended at any time with no impact on existing nodes.
+
+The two invariants that do bind are elsewhere: the **order of the select options**, because
+`restore_value` stores an index (append new brands and protocols at the end, never insert), and
+the **labels**, because they carry the continuity of the collected telemetry.
+
+### Turning the RS485 link off means invalidating its proxies
+
+**File:** `packages/yambms/yambms_rs485_pylon.yaml`
+
+`pylontech_rs485` is passive: it answers the inverter from the proxy sensors YamBMS feeds. Stopping
+the 100 ms interval therefore does **not** stop the link — the proxies keep their last value,
+`update_state_from_sensors_()` still returns true, and the component keeps answering with stale
+data while refreshing `rs485_status`, which is why the status stayed ON.
+
+The component's own fail-safe is a `NaN` on any of the eight sensors it checks. The `else` branch
+of the interval publishes those `NaN` once per transition, guarded by
+`rs485${rs485_id}_proxies_valid` so it does not run ten times a second.
+
+Only those eight sensors matter — the ones read by `update_state_from_sensors_()`. Invalidating the
+others would be harmless but pointless, and would hide which ones the contract actually depends on.
+
+### On RS485 the protocol is compiled, the brand only gates it
+
+**Files:** `packages/yambms/yambms_rs485.yaml`, `packages/yambms/yambms_rs485_pylon.yaml`,
+`packages/yambms/yambms_rs485_voltronic.yaml`
+
+`rs485_protocol` picks the implementation at compile time, and each implementation declares what
+it is in `rs485${rs485_id}_compiled_protocol`. In `Automatic` the resolution script applies that
+value and never derives a protocol from the brand: a node can only speak what was compiled into
+it, and resolving anything else made the diagnostics describe a protocol that was not running.
+
+Voltronic and MPP Solar are the reason this cannot be a brand mapping. On recent firmwares,
+parameter `05` offers both `PYL` and `LIB` on RS485, so either implementation is a valid choice
+for the same inverter and the brand says nothing about which one was compiled.
+
+`LIB` is the one exception. It is a Voltronic protocol and no other brand can use it, so in
+`Automatic` a node compiled for `LIB` stays silent for any other brand, and `Note` says why.
+Forcing `LIB` is still possible, because an explicit protocol always takes priority over the
+brand. Rebranded inverters are expected to select `Voltronic`. MPP Solar is not a rebrand, which
+is why it has its own entry.
+
+### Turning the LIB link off means moving its Modbus address
+
+**File:** `packages/yambms/yambms_rs485_voltronic.yaml`
+
+`modbus_server` has no off switch, and returning nothing from a `read_lambda` only turns the reply
+into an exception frame, so the inverter still gets an answer on a link that should be silent.
+`ModbusServerHub::find_device_()` matches the address on every request, so moving the server to
+address `248` makes the hub drop the request instead. The 100 ms interval moves it back to `1`
+only while `rs485${rs485_id}_active_protocol` is `LIB`.
+
+Do not replace this with reported charge and discharge limits of zero: the inverter would still
+see a battery, on a link the user believes is off.
+
+### `Disabled` unregisters the link instead of faulting it
+
+**File:** `packages/base/device_base_fault_registry.yaml`
+
+Turning a link off stops the frames, so the inverter stops acknowledging, the link timer expires
+and the status binary sensor goes false. Fed straight into `global_update_fault()` that lights the
+fault LED for something the user asked for.
+
+The registry already had the right answer: state `2`, which both the master mask and the health
+report ignore. `global_update_fault()` only takes a `bool`, so it can write `0` or `1` and nothing
+else — hence `global_unregister_fault()`, added alongside it.
+
+Do not use `Healthy` for a disabled link. It would clear the LED just as well, but the health
+report would print `[ OK ]` for a link that sends nothing, which is worse than the bug it fixes.
+
+The guard exists in **two** places and both are needed: the resolution script applies it when the
+protocol changes, and the status sensor's `on_state` applies it on every subsequent state change.
+Without the second one the link timer would re-raise the fault a few seconds later.
+
+A link left at `Automatic` with no brand selected is deliberately **not** unregistered — it faults.
+That is the signal telling the user the node was never configured, which is the whole point of the
+1.8.0 breaking change.
+
+### Both ACK triggers are registered
+
+`canbus.cpp` matches a trigger on `can_id` **and** `use_extended_id`, so declaring `0x305` twice —
+once standard, once extended — is not a conflict: only the one matching the received frame fires.
+This is why the Schneider XW Pro extended ACK needs no configuration, and why the
+`canbus_extended_ack` substitution was removed. Both triggers call the same script so the handler
+is not duplicated.
+
+## A UART is declared by the package that consumes it
+
+**Files:** `packages/board/board_options_itf_uart_*.yaml`, every package taking a `*_uart_id`
+
+The main YAML names a UART once, in the `vars:` of the package that uses it, and that package
+imports the matching `board_options_itf_${xxx_uart_id}.yaml`. It replaces a two-step declaration,
+an `uart_esp_N` include followed by a `!extend` of the baud rate, which could not reach a WK2168
+channel: those live under `wk2168_spi[].uart[]`, so every consumer needed an `_expander` twin
+without the `uart:` block.
+
+### One importer per UART
+
+Two imports of the same UART fail with `ID uart_esp_1 redefined`, on an expander channel too. Keep
+it that way. Sharing a UART at two speeds has no valid meaning, and with the old `!extend` it did
+not fail: the extended value simply won, so an inverter link declared at 115200 silently ran at
+the 9600 of a BMS package on the same UART.
+
+This is why bus-level packages import the UART, not the per-BMS ones: a bus package is included
+once, the BMS packages on that bus several times.
+
+### Each package keeps its key, `uart_baud_rate` stays internal
+
+Every package exposes its own key (`rs485_uart_baud_rate`, `pace_modbus_baud_rate`,
+`shunt_uart_baud_rate`...) and maps it to `uart_baud_rate` in the `vars:` of the import. Do not
+expose `uart_baud_rate` itself: with `${uart_baud_rate | default(...)}` in every package, one value
+in a root `substitutions:` block would override all the consumers of the node, defaults included.
+
+The defaults live in that `| default()` and nowhere else:
+
+- **Not in `substitutions:`.** Package substitutions are merged into one global block, so
+  `bms_uart_baud_rate` would get the same value for JBD (9600), JK UART (115200) and JK Display
+  (2400), with no error.
+- **Not in the UART file.** It does not know who imports it, and a wrong speed is valid
+  configuration that fails silently on the wire. This is what the old fixed `115200` hid: the JK
+  UART, JK sniffer and Junctek packages only worked because that value happened to suit them.
+- **Not as a fixed value.** A value written in the `vars:` of the import takes priority over the
+  one passed by the user, who is ignored without a message.
+
+Leave `| default()` out when the speed depends on the installation (PACE, EG4, Seplos, BASEN): a
+missing key then fails validation instead of picking a speed.
+
+`modbus_baud_rate` is the exception that keeps its place in `substitutions:`: `yambms_config.yaml`
+shares it between the nodes of a multi-node setup from the root.
+
+### `flow_control` is enabled by a var, so `min_version` is 2026.10.0
+
+`uart_flow_control_pin` is passed like any other var of the import and reaches the UART file,
+which includes `board_options_itf_uart_flow_control.yaml` only when it is defined. So no consumer
+has to know about it.
+
+`flow_control_pin: ${uart_flow_control_pin}` with an empty default is not an option, the UART
+schema refuses a null pin. The `condition:` key of `!include` is what makes the pin optional, and
+ESPHome 2026.8.0 ignores it: the file is included anyway and the configuration fails. Do not lower
+`min_version` without replacing it.
+
+This `!extend` is the last one on a UART. It is not exposed to the user, and it works whatever the
+order of the packages.
+
+### Expander channels
+
+`uart_spi_N` and `uart_i2c_N` are numbered like the PVbrain2 connectors: `0` to `3` on bridge 0,
+`4` to `7` on bridge 1. Do not shift them to start at 1, every existing wiring would move by one
+channel.
+
+Each channel adds itself with `!extend uart_bridgeN`, and the bridges are declared with an empty
+`uart:` by `board_options_itf_wk2168_spi.yaml` or `board_options_itf_wk2168_i2c.yaml`.
+
+A WK2168 channel has no `flow_control_pin`, so `uart_flow_control_pin` is ignored there, without a
+message. Its RS485 transceivers must handle the direction automatically. The `_talk_pin` packages
+are kept for that one case: they drive a plain GPIO from the component, which works on any UART.
+Everywhere else `uart_flow_control_pin` replaces them, and the examples no longer show them.
+
+The UART id must be readable when the `!include` filename is resolved. A value built from a
+substitution declared in a package, such as `uart_${uart_hub_bus}_3`, is not, so write `uart_spi_3`.
+
+## A CAN node is declared by the package that consumes it
+
+**Files:** `packages/board/board_options_itf_canbus_*.yaml`, `packages/yambms/yambms_canbus.yaml`,
+`packages/bms/bms_sensors_DEYE_CAN_top_*.yaml`
+
+Same principle as the UART: the main YAML describes a link once, in the `vars:` of the package that
+uses it. The mechanism is not the same, and the differences are deliberate.
+
+### The file is picked by platform, not by id
+
+`uart_esp_1` is bound to pins and says nothing about what is connected. A CAN node is the reverse:
+its id is a role (`canbus_inverter_1`, `canbus_bms_1`) that users read and reuse, and the hardware
+behind it is either of two controllers. Naming the file after the id would have replaced those
+roles with `canbus_esp_1`-style names for no gain.
+
+So the id stays free in `canbus_node_id` and `canbus_platform` picks the file, the way
+`rs485_protocol` picks the RS485 implementation.
+
+### `canbus_platform` has no default
+
+A wrong default is valid configuration on the wrong pins, and it fails silently on the wire. A
+missing key fails validation instead, with `Cannot load include with unresolved substitutions`.
+
+### `external` declares nothing
+
+The import is unconditional, so a node that already exists needs a file that adds nothing:
+
+- the espBerry board declares its two nodes in its own board file ;
+- a second link on the same node would otherwise fail with `ID canbus_inverter_1 redefined`.
+
+`board_options_itf_canbus_external.yaml` is that file. `canbus_bitrate` has no effect there, the
+bit rate is the one of the package or board that declares the node.
+
+### One importer per node
+
+As with a UART, two imports of the same node fail, and that should stay so. This is why only the
+Deye `top` packages import the node: the `module` packages are included several times on one bus
+and only add `on_frame` triggers with `!extend`.
+
+In the Deye packages `canbus_id` holds a node id, while in `yambms_canbus.yaml` it is a number. The
+`top` packages map it with `canbus_node_id: ${canbus_id}` so that the examples keep their key.
+
+`board_options_itf_canbus_mcp2515.yaml` declares its own `spi:` bus, so importing it twice fails
+with `ID mcp2515_spi_bus redefined`. A board with two MCP2515 declares them itself and uses
+`external`, as the espBerry does.
+
+### `canbus_bit_rate` stays internal
+
+The reasoning is the UART one: the default lives in the `| default()` of the consumer, not in the
+CAN file nor in `substitutions:`. `esp32_canbus_bitrate` and `mcp2515_canbus_bitrate` were removed,
+the bit rate is not a property of the controller but of the bus.
+
+### The bit rate is set at compile time, the protocol is not
+
+`canbus_bitrate` is compiled in, and nothing in YamBMS changes it at runtime, while the `Protocol`
+select does change at runtime. So a protocol that does not run at 500 kbps cannot work from the
+select alone: the user must also set `canbus_bitrate`. Any such protocol needs a `Note` in
+`yambms_brand_registry.yaml` that says so.
 
 ## Empirical constants
 
